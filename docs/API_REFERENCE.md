@@ -1,355 +1,422 @@
 # API Reference
 
-## TMDB API
+This document provides detailed information about the APIs and functions used in the TVDB Workflow Automation script.
 
-### Base URL
-```
-https://api.themoviedb.org/3
-```
+## Table of Contents
 
-### Authentication
-All requests require an API key passed as a query parameter:
-```
-?api_key=YOUR_API_KEY
-```
+- [External APIs](#external-apis)
+- [Internal Functions](#internal-functions)
+- [Configuration](#configuration)
+- [Data Structures](#data-structures)
+- [Event Handlers](#event-handlers)
 
-### Endpoints Used
+## External APIs
 
-#### Get TV Series Details
-```
-GET /tv/{tv_id}?api_key={api_key}&append_to_response=external_ids,images,translations
+### TMDB (The Movie Database) API
+
+**Base URL**: `https://api.themoviedb.org/3`
+
+#### TV Series Information
+```javascript
+GET /tv/{series_id}?api_key={api_key}&language={language}
 ```
 
 **Parameters:**
-- `tv_id` (required): The TV series ID
-- `append_to_response`: Comma-separated list of sub-objects to include
+- `series_id`: TMDB TV series ID (e.g., 277489)
+- `api_key`: Your TMDB API key
+- `language`: Language code (e.g., 'en-US', 'te')
 
-**Response Structure:**
-```json
+**Response Fields Used:**
+- `name`: English series name
+- `original_name`: Original series name
+- `overview`: Series description
+- `original_language`: Original language code
+- `first_air_date`: First air date
+- `genres`: Array of genre objects
+- `homepage`: Official website URL
+- `external_ids.imdb_id`: IMDb ID
+
+#### TV Series Images
+```javascript
+GET /tv/{series_id}/images?api_key={api_key}
+```
+
+**Response Fields Used:**
+- `posters`: Array of poster objects
+  - `file_path`: Image path
+  - `vote_average`: Quality rating
+  - `vote_count`: Number of votes
+  - `width`: Image width
+  - `height`: Image height
+  - `iso_639_1`: Language code
+
+#### TV Series Episodes
+```javascript
+GET /tv/{series_id}/season/{season_number}?api_key={api_key}&language={language}
+```
+
+**Parameters:**
+- `series_id`: TMDB TV series ID
+- `season_number`: Season number (e.g., 1)
+- `api_key`: Your TMDB API key
+- `language`: Language code
+
+**Response Fields Used:**
+- `episodes`: Array of episode objects
+  - `episode_number`: Episode number
+  - `name`: Episode title
+  - `overview`: Episode description
+  - `air_date`: Air date
+  - `runtime`: Episode duration
+  - `still_path`: Episode image path
+
+### OMDb API
+
+**Base URL**: `https://www.omdbapi.com`
+
+#### Series Information
+```javascript
+GET /?i={imdb_id}&apikey={api_key}
+```
+
+**Parameters:**
+- `imdb_id`: IMDb ID (e.g., tt32047599)
+- `api_key`: Your OMDb API key
+
+**Response Fields Used:**
+- `Title`: Series title
+- `Plot`: Series description
+- `Poster`: Poster image URL
+- `Language`: Language information
+- `Year`: Release year
+
+#### Season Information
+```javascript
+GET /?i={imdb_id}&Season={season_number}&apikey={api_key}
+```
+
+**Parameters:**
+- `imdb_id`: IMDb ID
+- `season_number`: Season number
+- `api_key`: Your OMDb API key
+
+**Response Fields Used:**
+- `Episodes`: Array of episode objects
+  - `Episode`: Episode number
+  - `Title`: Episode title
+  - `Plot`: Episode description
+  - `Released`: Air date
+
+## Internal Functions
+
+### Core Workflow Functions
+
+#### `fetchData(tmdbId)`
+Fetches series data from TMDB and OMDb APIs.
+
+**Parameters:**
+- `tmdbId` (string): TMDB TV series ID
+
+**Returns:** Promise that resolves to series data object
+
+**Data Structure:**
+```javascript
 {
-  "id": 12345,
-  "name": "Series Name",
-  "original_name": "Original Name",
-  "overview": "Series overview...",
-  "original_language": "ja",
-  "origin_country": ["JP"],
-  "status": "Returning Series",
-  "genres": [{"id": 16, "name": "Animation"}],
-  "episode_run_time": [24],
-  "homepage": "https://example.com",
-  "external_ids": {
-    "imdb_id": "tt1234567"
+  tmdb: {
+    name: "Series Name",
+    originalName: "Original Series Name",
+    overview: "Series description",
+    originalLanguage: "te",
+    year: 2024,
+    genres: [...],
+    homepage: "https://example.com"
   },
-  "images": {
-    "posters": [...]
+  omdb: {
+    Title: "Series Title",
+    Plot: "Series plot",
+    Poster: "https://example.com/poster.jpg",
+    Language: "Telugu"
   },
-  "translations": {
-    "translations": [...]
+  imdbId: "tt32047599"
+}
+```
+
+#### `applyStep1()`
+Fills Step 1 (Create Show) form fields.
+
+**Fields Filled:**
+- IMDb ID field
+- TMDB ID field
+- Official Site field
+
+#### `applyStep2()`
+Fills Step 2 (Add Series) form fields.
+
+**Fields Filled:**
+- Series name (original language)
+- Series overview
+- Original language
+- Original country
+- Status
+- Genres
+
+#### `applyStep3()`
+Fills Step 3 (Bulk Add Episodes) form fields.
+
+**Process:**
+1. Creates episode forms by clicking "Add Another"
+2. Fills each episode with:
+   - Episode number
+   - Episode name
+   - Episode description
+   - Air date
+   - Runtime
+
+#### `applyStep4()`
+Fills Step 4 (Upload Poster) form fields.
+
+**Fields Filled:**
+- Poster URL field
+- Language field
+
+#### `applyStep5()`
+Fills Step 5 (English Translation) form fields.
+
+**Fields Filled:**
+- Series name (English)
+- Series overview (English)
+- Episode names (English)
+- Episode descriptions (English)
+
+### Utility Functions
+
+#### `fillField(field, value)`
+Fills a form field with human-like behavior.
+
+**Parameters:**
+- `field` (HTMLElement): Form field element
+- `value` (string): Value to fill
+
+**Features:**
+- Human-like typing simulation
+- Event triggering (input, change, blur)
+- Error handling
+
+#### `findFormField(labelText)`
+Finds form fields using multiple strategies.
+
+**Parameters:**
+- `labelText` (string): Label text to search for
+
+**Strategies:**
+1. Label `for` attribute
+2. Adjacent element search
+3. Placeholder text matching
+4. Name attribute matching
+5. ID attribute matching
+6. Data attribute matching
+7. TVDB-specific patterns
+
+#### `mapLanguageCode(tmdbCode)`
+Maps TMDB language codes to TVDB format.
+
+**Parameters:**
+- `tmdbCode` (string): TMDB language code (e.g., 'te')
+
+**Returns:** TVDB language code (e.g., 'tel')
+
+**Mapping Examples:**
+- 'en' → 'eng'
+- 'te' → 'tel'
+- 'hi' → 'hin'
+- 'ta' → 'tam'
+
+### Data Management Functions
+
+#### `saveConfig()`
+Saves configuration to browser storage.
+
+**Data Saved:**
+- TMDB API key
+- OMDb API key
+- User preferences
+
+#### `loadConfig()`
+Loads configuration from browser storage.
+
+**Returns:** Configuration object
+
+#### `updateStatus(message)`
+Updates the status display in the helper panel.
+
+**Parameters:**
+- `message` (string): Status message to display
+
+## Configuration
+
+### API Keys
+
+#### TMDB API Key
+- **Required**: Yes
+- **Purpose**: Fetch series and episode data
+- **Storage**: Browser storage (encrypted)
+- **Format**: String (32 characters)
+
+#### OMDb API Key
+- **Required**: Yes
+- **Purpose**: Fallback data and additional metadata
+- **Storage**: Browser storage (encrypted)
+- **Format**: String (8 characters)
+
+### User Preferences
+
+#### Stealth Mode
+- **Default**: false
+- **Purpose**: Hide helper panel to avoid detection
+- **Toggle**: Ctrl+Alt+S or UI button
+
+#### Debug Logging
+- **Default**: true
+- **Purpose**: Enable detailed console logging
+- **Location**: Browser console (F12)
+
+#### Language Mapping
+- **Default**: Automatic
+- **Purpose**: Convert TMDB language codes to TVDB format
+- **Customization**: Modify LANGUAGE_MAP object
+
+## Data Structures
+
+### Series Data Object
+```javascript
+{
+  tmdbId: "277489",
+  imdbId: "tt32047599",
+  tmdb: {
+    name: "Vikkatakavi",
+    originalName: "వికటకవి",
+    overview: "Series description...",
+    originalLanguage: "te",
+    year: 2024,
+    genres: [
+      { id: 18, name: "Drama" },
+      { id: 80, name: "Crime" }
+    ],
+    homepage: "https://www.zee5.com/..."
+  },
+  omdb: {
+    Title: "Vikkatakavi",
+    Plot: "Series plot...",
+    Poster: "https://m.media-amazon.com/...",
+    Language: "Telugu",
+    Year: "2024"
   }
 }
 ```
 
-#### Get Season Details
-```
-GET /tv/{tv_id}/season/{season_number}?api_key={api_key}
-```
-
-**Parameters:**
-- `tv_id` (required): The TV series ID
-- `season_number` (required): The season number (0 for specials)
-
-**Response Structure:**
-```json
+### Episode Data Object
+```javascript
 {
-  "id": 123456,
-  "name": "Season 1",
-  "overview": "Season overview...",
-  "season_number": 1,
-  "episodes": [
+  episodes: [
     {
-      "id": 789,
-      "name": "Episode Name",
-      "overview": "Episode overview...",
-      "episode_number": 1,
-      "air_date": "2020-01-01",
-      "runtime": 24
+      episodeNumber: 1,
+      name: "Episode Title",
+      overview: "Episode description...",
+      airDate: "2024-01-01",
+      runtime: 45,
+      stillPath: "/path/to/image.jpg",
+      descriptionSource: "TMDB"
     }
   ]
 }
 ```
 
-### Important Fields
-
-#### Status Mapping
-| TMDB Status | TVDB Status |
-|------------|-------------|
-| Returning Series | Continuing |
-| Ended, Canceled | Ended |
-| Planned, In Production, Upcoming | Upcoming |
-
-#### Genre Mapping
-Requires a mapping table from TMDB genre IDs to TVDB genre names.
-Common mappings:
-- Animation → Animation
-- Comedy → Comedy
-- Drama → Drama
-- Documentary → Documentary
-- etc.
-
-#### Language Code Mapping
-ISO-639-1 → ISO-639-2 mapping required:
-| ISO-639-1 | ISO-639-2 | Language |
-|-----------|-----------|----------|
-| en | eng | English |
-| ja | jpn | Japanese |
-| ko | kor | Korean |
-| zh | zho | Chinese |
-| es | spa | Spanish |
-| etc. | | |
-
----
-
-## OMDb API
-
-### Base URL
-```
-https://www.omdbapi.com
-```
-
-### Authentication
-API key passed as a query parameter:
-```
-?apikey=YOUR_API_KEY
-```
-
-### Endpoints Used
-
-#### Get by IMDb ID
-```
-GET /?apikey={api_key}&i={imdb_id}&type=series
-```
-
-**Parameters:**
-- `apikey` (required): Your OMDb API key
-- `i` (required): IMDb ID (with or without "tt" prefix)
-- `type`: Restrict to series type
-
-**Response Structure:**
-```json
-{
-  "Title": "Series Title",
-  "Year": "2020",
-  "Language": "Japanese, English",
-  "totalSeasons": "1",
-  "Response": "True"
-}
-```
-
-### Rate Limits
-- Free tier: 1,000 requests/day
-- Paid tiers: Higher limits available
-
----
-
-## Data Extraction Guide
-
-### Step 1: Create Show
+### Poster Data Object
 ```javascript
 {
-  imdbId: tmdbData.external_ids.imdb_id,
-  tmdbId: tmdbData.id.toString(),
-  officialSite: tmdbData.homepage
+  posters: [
+    {
+      file_path: "/path/to/poster.jpg",
+      vote_average: 7.5,
+      vote_count: 100,
+      width: 2000,
+      height: 3000,
+      iso_639_1: "en"
+    }
+  ],
+  selectedPoster: { /* selected poster object */ }
 }
 ```
 
-### Step 2: Add Series
+## Event Handlers
+
+### Button Click Handlers
+
+#### Fetch Data Button
 ```javascript
-{
-  originalLanguage: mapIso6391to2(tmdbData.original_language),
-  name: getTranslation(tmdbData, 'name', originalLanguage),
-  overview: getTranslation(tmdbData, 'overview', originalLanguage),
-  country: tmdbData.origin_country[0],
-  status: mapStatus(tmdbData.status),
-  genres: mapGenres(tmdbData.genres)
-}
+document.getElementById('tvdb-fetch-data').onclick = fetchData;
 ```
 
-### Step 3: Bulk Add Episodes
+#### Apply Button
 ```javascript
-seasonData.episodes.map(episode => ({
-  number: episode.episode_number,
-  name: episode.name,
-  overview: episode.overview,
-  firstAired: formatDate(episode.air_date),
-  runtime: episode.runtime || seasonAverage || seriesDefault
-}))
+document.getElementById('tvdb-apply').onclick = applyStep;
 ```
 
-### Step 4: Upload Poster
+#### Apply & Continue Button
 ```javascript
-{
-  posterUrl: getBestPoster(tmdbData.images.posters),
-  language: posterLanguage || originalLanguage
-}
+document.getElementById('tvdb-apply-continue').onclick = applyAndContinue;
 ```
 
-### Step 5: English Translation
+### Keyboard Shortcuts
+
+#### Stealth Mode Toggle
 ```javascript
-{
-  englishTitle: getTranslation(tmdbData, 'name', 'en'),
-  englishOverview: getTranslation(tmdbData, 'overview', 'en')
-}
-```
-
----
-
-## Helper Functions Reference
-
-### Date Formatting
-```javascript
-function formatDate(isoDate) {
-  // TMDB: YYYY-MM-DD
-  // TVDB: MM/DD/YYYY
-  const [year, month, day] = isoDate.split('-');
-  return `${month}/${day}/${year}`;
-}
-```
-
-### Translation Lookup
-```javascript
-function getTranslation(data, field, language) {
-  const translation = data.translations.translations.find(
-    t => t.iso_639_1 === language
-  );
-  
-  if (translation && translation.data[field]) {
-    return translation.data[field];
+document.addEventListener('keydown', (e) => {
+  if (e.ctrlKey && e.altKey && e.key === 's') {
+    toggleStealthMode();
   }
-  
-  // Fallback to original
-  return data[`original_${field}`] || data[field];
-}
+});
 ```
 
-### Best Poster Selection
+#### Show Panel
 ```javascript
-function getBestPoster(posters) {
-  // Prefer high resolution, English language
-  const english = posters.find(p => p.iso_639_1 === 'en');
-  if (english) return imageBaseUrl + english.file_path;
-  
-  // Fallback to first poster
-  return imageBaseUrl + posters[0].file_path;
-}
+document.addEventListener('keydown', (e) => {
+  if (e.ctrlKey && e.altKey && e.key === 't') {
+    showPanel();
+  }
+});
 ```
-
-### Runtime Fallback Chain
-```javascript
-function getRuntime(episode, season, series) {
-  return episode.runtime 
-    || season.averageEpisodeRuntime 
-    || series.episode_run_time[0]
-    || 0;
-}
-```
-
----
 
 ## Error Handling
 
-### Common Errors
+### API Errors
+- **Network Errors**: Automatic retry with exponential backoff
+- **Rate Limiting**: Respects API rate limits
+- **Invalid Responses**: Fallback to alternative data sources
 
-#### 401 Unauthorized
-- **Cause**: Invalid or missing API key
-- **Solution**: Verify API key is correct
+### Form Errors
+- **Field Not Found**: Multiple fallback strategies
+- **Validation Errors**: User notification and manual override
+- **Submission Errors**: Retry mechanism and error reporting
 
-#### 404 Not Found
-- **Cause**: Invalid TMDB ID or resource not found
-- **Solution**: Check TMDB ID is correct
+### User Errors
+- **Invalid Input**: Input validation and error messages
+- **Missing Data**: Clear error messages and guidance
+- **Configuration Issues**: Setup wizard and validation
 
-#### 429 Too Many Requests
-- **Cause**: Rate limit exceeded
-- **Solution**: Implement exponential backoff, reduce request frequency
+## Performance Considerations
 
-#### Network Errors
-- **Cause**: Connection issues
-- **Solution**: Retry with backoff, show user-friendly message
+### API Optimization
+- **Caching**: Stores fetched data to avoid redundant API calls
+- **Batch Requests**: Groups related API calls when possible
+- **Rate Limiting**: Respects API rate limits and implements delays
 
-### Error Response Structure
-```json
-{
-  "status_code": 7,
-  "status_message": "Invalid API key"
-}
-```
+### DOM Optimization
+- **Efficient Selectors**: Uses most efficient CSS selectors
+- **Event Delegation**: Minimizes event listener overhead
+- **Lazy Loading**: Loads data only when needed
 
----
-
-## Rate Limits
-
-### TMDB
-- Free tier: ~40 requests/10 seconds
-- Should implement request throttling
-
-### OMDb
-- Free tier: 1,000 requests/day
-- Should track daily usage
-
-### Best Practices
-1. Cache API responses where possible
-2. Batch requests when feasible
-3. Implement exponential backoff
-4. Show rate limit status to user
-5. Queue requests if limit is approached
-
----
-
-## Sample Request Flow
-
-### Complete Workflow
-
-```javascript
-// 1. Fetch TV series data
-const seriesResponse = await fetch(
-  `https://api.themoviedb.org/3/tv/${tmdbId}?api_key=${apiKey}&append_to_response=external_ids,images,translations`
-);
-const seriesData = await seriesResponse.json();
-
-// 2. Extract IMDb ID
-const imdbId = seriesData.external_ids.imdb_id;
-
-// 3. Fetch OMDb data (optional)
-const omdbResponse = await fetch(
-  `https://www.omdbapi.com/?apikey=${omdbKey}&i=${imdbId}&type=series`
-);
-const omdbData = await omdbResponse.json();
-
-// 4. Fetch season data
-const seasonResponse = await fetch(
-  `https://api.themoviedb.org/3/tv/${tmdbId}/season/${seasonNumber}?api_key=${apiKey}`
-);
-const seasonData = await seasonResponse.json();
-
-// 5. Process and map data
-const processedData = {
-  series: processSeriesData(seriesData),
-  season: processSeasonData(seasonData),
-  omdb: processOmdbData(omdbData)
-};
-```
-
----
-
-## Additional Resources
-
-### Official Documentation
-- [TMDB API Documentation](https://developers.themoviedb.org/3)
-- [OMDb API Documentation](http://www.omdbapi.com/)
-
-### API Status
-- TMDB: Generally stable, rare outages
-- OMDb: Generally stable, free tier has daily limits
-
-### Support
-- TMDB: [Community Forum](https://www.themoviedb.org/talk)
-- OMDb: [Support Email](http://www.omdbapi.com/)
+### Memory Management
+- **Data Cleanup**: Clears unused data from memory
+- **Event Cleanup**: Removes event listeners when not needed
+- **Storage Management**: Efficient use of browser storage

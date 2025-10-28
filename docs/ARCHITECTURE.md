@@ -1,182 +1,468 @@
-# TVDB Automation Architecture
+# Architecture Documentation
 
-## Overview
+This document describes the technical architecture and design decisions of the TVDB Workflow Automation script.
 
-The TVDB Automation system is a single Tampermonkey userscript that automates TheTVDB's submission workflow by integrating with TMDB and OMDb APIs.
+## Table of Contents
 
-## System Components
+- [System Overview](#system-overview)
+- [Component Architecture](#component-architecture)
+- [Data Flow](#data-flow)
+- [API Integration](#api-integration)
+- [User Interface](#user-interface)
+- [Error Handling](#error-handling)
+- [Security Considerations](#security-considerations)
+- [Performance Optimization](#performance-optimization)
 
-### 1. Core Script
-- **File:** `src/tvdb-workflow-helper.user.js`
-- **Purpose:** Main entry point and orchestration layer
-- **Responsibilities:**
-  - UI panel management
-  - State machine coordination
-  - Page detection and routing
-  - Event handling
+## System Overview
 
-### 2. Data Layer
+The TVDB Workflow Automation script is a Tampermonkey userscript that automates the 5-step TVDB submission process. It operates as a client-side overlay that interacts with the TVDB website through DOM manipulation and API calls.
 
-#### API Clients
-- **TMDB Client**: Primary data source
-  - TV series information
-  - Episode details
-  - Translations
-  - Images (posters)
-- **OMDb Client**: Fallback data source
-  - IMDb metadata
-  - Additional title information
+### High-Level Architecture
 
-#### Storage Manager
-- **Greasemonkey Storage API** (`GM_setValue`/`GM_getValue`)
-- **Persistent Context**: Series metadata across workflow steps
-- **User Preferences**: UI settings and API keys
-- **Cache Management**: Temporary data for preview/validation
-
-### 3. Workflow Engine
-
-#### State Machine
 ```
-Step 1 (Create Show) 
-  → Step 2 (Add Series)
-  → Season Navigation
-  → Step 3 (Bulk Add Episodes)
-  → Step 4 (Upload Poster)
-  → Step 5 (English Translation)
+┌─────────────────────────────────────────────────────────────┐
+│                    Browser Environment                      │
+├─────────────────────────────────────────────────────────────┤
+│  Tampermonkey Extension                                     │
+│  ┌─────────────────────────────────────────────────────────┐ │
+│  │  TVDB Workflow Script                                   │ │
+│  │  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐       │ │
+│  │  │ UI Layer    │ │ Logic Layer │ │ Data Layer  │       │ │
+│  │  └─────────────┘ └─────────────┘ └─────────────┘       │ │
+│  └─────────────────────────────────────────────────────────┘ │
+├─────────────────────────────────────────────────────────────┤
+│  TVDB Website (DOM Manipulation)                           │
+├─────────────────────────────────────────────────────────────┤
+│  External APIs (HTTP Requests)                             │
+│  ┌─────────────┐ ┌─────────────┐                          │
+│  │ TMDB API    │ │ OMDb API    │                          │
+│  └─────────────┘ └─────────────┘                          │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-#### Page Detection
-- URL-based routing with regex patterns
-- Dynamic page type detection
-- Context recovery on page load
+## Component Architecture
 
-### 4. Form Filler Engine
+### UI Layer
 
-#### Smart Selectors
-- Label-based field detection
-- React component integration
-- Dynamic input type handling
-- Event emission (`input`, `change`)
+The UI layer manages the user interface and user interactions.
 
-#### Data Mapping
-- TMDB genres → TVDB taxonomy
-- TMDB status → TVDB status
-- ISO-639-1 → ISO-639-2 language codes
-- Date format conversion (YYYY-MM-DD → MM/DD/YYYY)
+#### Components:
+- **Helper Panel**: Main overlay interface
+- **Step Indicators**: Shows current workflow step
+- **Form Controls**: Buttons and inputs for user interaction
+- **Data Preview**: Displays fetched data before filling
+- **Status Display**: Shows operation status and errors
 
-### 5. UI Components
+#### Key Functions:
+```javascript
+// UI Management
+function createHelperPanel()           // Creates main UI overlay
+function generateUIHTML(step)          // Generates step-specific UI
+function updateStatus(message)         // Updates status display
+function updatePreview(content)        // Updates data preview
 
-#### Helper Panel
-- Sticky positioning (top-right)
-- Compact/collapsed states
-- Hotkey trigger support
-- Dynamic content based on step
+// Event Handling
+function setupEventListeners()         // Sets up button click handlers
+function handleButtonClick(buttonId)   // Handles button interactions
+function toggleStealthMode()           // Toggles stealth mode
+```
 
-#### Preview Box
-- Real-time data preview
-- Validation feedback
-- Error messaging
-- User confirmation prompts
+### Logic Layer
+
+The logic layer contains the core business logic and workflow management.
+
+#### Components:
+- **Workflow Manager**: Manages the 5-step process
+- **Form Filler**: Handles form field detection and filling
+- **Data Processor**: Processes and validates fetched data
+- **Error Handler**: Manages errors and recovery
+
+#### Key Functions:
+```javascript
+// Workflow Management
+function getCurrentStep()              // Detects current TVDB step
+function applyStep(step)               // Applies step-specific logic
+function applyAndContinue(step)        // Applies and navigates
+
+// Form Processing
+function fillField(field, value)       // Fills individual form fields
+function findFormField(labelText)      // Finds form fields
+function fillTranslationFields()       // Fills translation fields
+
+// Data Processing
+function processTmdbData(data)         // Processes TMDB API response
+function processOmdbData(data)         // Processes OMDb API response
+function mapLanguageCode(code)         // Maps language codes
+```
+
+### Data Layer
+
+The data layer manages data storage, API communication, and data persistence.
+
+#### Components:
+- **API Client**: Handles external API calls
+- **Data Storage**: Manages local data persistence
+- **Configuration Manager**: Handles user settings
+- **Cache Manager**: Manages data caching
+
+#### Key Functions:
+```javascript
+// API Communication
+async function fetchData(tmdbId)       // Fetches series data
+async function fetchEpisodes()         // Fetches episode data
+async function fetchPosters()          // Fetches poster data
+async function fetchTranslation()      // Fetches translation data
+
+// Data Management
+function saveConfig()                  // Saves user configuration
+function loadConfig()                  // Loads user configuration
+function storeData(data)               // Stores fetched data
+function retrieveData()                // Retrieves stored data
+```
 
 ## Data Flow
 
-### 1. Initialization
+### 1. Initialization Flow
+
 ```
-Page Load → Page Detection → Context Load → Panel Render
+User loads TVDB page
+    ↓
+Script detects page and step
+    ↓
+Helper panel appears
+    ↓
+User configures API keys (if needed)
+    ↓
+Ready for workflow
 ```
 
-### 2. Data Fetching
+### 2. Data Fetching Flow
+
 ```
-User Input (TMDB ID) → API Call → Data Processing → Context Update → Preview
+User enters TMDB ID
+    ↓
+Script validates input
+    ↓
+Calls TMDB API
+    ↓
+Processes response
+    ↓
+Calls OMDb API (if needed)
+    ↓
+Stores data globally
+    ↓
+Updates UI preview
+    ↓
+Ready for form filling
 ```
 
-### 3. Form Application
+### 3. Form Filling Flow
+
 ```
-Context Data → Field Mapping → Value Setting → Event Emission → Validation
+User clicks "Fill" button
+    ↓
+Script detects form fields
+    ↓
+Validates data
+    ↓
+Fills fields sequentially
+    ↓
+Triggers form events
+    ↓
+Validates submission
+    ↓
+Proceeds to next step
 ```
 
-### 4. Workflow Progression
+### 4. Error Recovery Flow
+
 ```
-Apply & Continue → Form Validation → Context Save → Navigation → Context Load
+Error occurs
+    ↓
+Log error details
+    ↓
+Attempt retry (if applicable)
+    ↓
+Show user notification
+    ↓
+Provide manual override option
+    ↓
+Continue or abort
 ```
 
-## State Management
+## API Integration
 
-### Context Object Structure
+### TMDB API Integration
+
+#### Authentication
+- API key stored securely in browser storage
+- Key validation on script initialization
+- Error handling for invalid keys
+
+#### Rate Limiting
+- Respects TMDB rate limits (40 requests per 10 seconds)
+- Implements exponential backoff for retries
+- Caches responses to minimize API calls
+
+#### Data Processing
 ```javascript
-{
-  tmdbId: string,
-  imdbId: string,
-  originalIso1: string,
-  seriesSlug: string,
-  seriesId: string,
-  selectedSeason: number,
-  posterPick: object,
-  step: string,
-  reviewCache: object
+// TMDB Response Processing
+function processTmdbResponse(data) {
+  return {
+    name: data.name,
+    originalName: data.original_name,
+    overview: data.overview,
+    originalLanguage: data.original_language,
+    year: new Date(data.first_air_date).getFullYear(),
+    genres: data.genres.map(g => ({ id: g.id, name: g.name })),
+    homepage: data.homepage,
+    imdbId: data.external_ids?.imdb_id
+  };
 }
 ```
 
-### Storage Keys
-- `tvdbwf_tmdb_key`: TMDB API key
-- `tvdbwf_omdb_key`: OMDb API key
-- `tvdbwf_ctx`: Persistent context
-- `tvdbwf_ui`: UI preferences
+### OMDb API Integration
+
+#### Fallback Strategy
+- Used when TMDB data is incomplete
+- Provides additional metadata
+- Handles different data formats
+
+#### Data Mapping
+```javascript
+// OMDb Response Processing
+function processOmdbResponse(data) {
+  return {
+    Title: data.Title,
+    Plot: data.Plot !== 'N/A' ? data.Plot : '',
+    Poster: data.Poster !== 'N/A' ? data.Poster : '',
+    Language: data.Language,
+    Year: data.Year
+  };
+}
+```
+
+## User Interface
+
+### Helper Panel Design
+
+#### Layout Structure
+```
+┌─────────────────────────────────┐
+│ TVDB Workflow Helper v1.0    [X]│
+├─────────────────────────────────┤
+│ Step X: [Step Name]             │
+├─────────────────────────────────┤
+│ [Step-specific controls]        │
+├─────────────────────────────────┤
+│ [Data preview area]             │
+├─────────────────────────────────┤
+│ [Action buttons]                │
+├─────────────────────────────────┤
+│ Status: [Current status]        │
+└─────────────────────────────────┘
+```
+
+#### Responsive Design
+- Fixed positioning (top-right corner)
+- Scrollable content area
+- Collapsible sections
+- Stealth mode support
+
+### Form Field Detection
+
+#### Multi-Strategy Approach
+1. **Label Association**: `label[for="fieldId"]`
+2. **Adjacent Elements**: `label + input`
+3. **Placeholder Matching**: `input[placeholder*="text"]`
+4. **Name Attribute**: `input[name="fieldName"]`
+5. **ID Matching**: `input[id="fieldId"]`
+6. **Data Attributes**: `input[data-field="name"]`
+7. **TVDB-Specific Patterns**: Custom selectors for TVDB forms
+
+#### Fallback Hierarchy
+```javascript
+function findFormField(labelText) {
+  const strategies = [
+    () => document.querySelector(`label[for*="${labelText}"] + input`),
+    () => document.querySelector(`input[placeholder*="${labelText}"]`),
+    () => document.querySelector(`input[name*="${labelText}"]`),
+    () => document.querySelector(`input[id*="${labelText}"]`),
+    // ... more strategies
+  ];
+  
+  for (const strategy of strategies) {
+    const field = strategy();
+    if (field) return field;
+  }
+  return null;
+}
+```
 
 ## Error Handling
 
-### Network Errors
-- Retry with exponential backoff
-- User-friendly error messages
-- Fallback to alternative data sources
+### Error Classification
 
-### DOM Errors
-- Unknown layout detection
-- Diagnostic information capture
-- Graceful degradation
+#### API Errors
+- **Network Errors**: Connection failures, timeouts
+- **Authentication Errors**: Invalid API keys
+- **Rate Limiting**: Too many requests
+- **Data Errors**: Invalid responses, missing fields
 
-### Validation Errors
-- Real-time field validation
-- Prevent invalid submissions
-- User feedback loops
+#### Form Errors
+- **Field Detection**: Fields not found
+- **Validation Errors**: Invalid input data
+- **Submission Errors**: Form submission failures
+
+#### User Errors
+- **Input Validation**: Invalid TMDB IDs, missing data
+- **Configuration Errors**: Missing API keys, invalid settings
+
+### Error Recovery Strategies
+
+#### Automatic Recovery
+- **Retry Logic**: Exponential backoff for transient errors
+- **Fallback Data**: Use alternative data sources
+- **Field Detection**: Try multiple field detection strategies
+
+#### User-Assisted Recovery
+- **Manual Override**: Allow user to manually fill fields
+- **Configuration Fix**: Guide user to fix configuration issues
+- **Error Reporting**: Provide detailed error information
+
+### Error Logging
+
+```javascript
+function logError(error, context) {
+  console.error(`[TVDB-Workflow] ${context}:`, error);
+  
+  // Log to status display
+  updateStatus(`Error: ${error.message}`);
+  
+  // Store error for debugging
+  window.tvdbErrors = window.tvdbErrors || [];
+  window.tvdbErrors.push({
+    timestamp: new Date().toISOString(),
+    context: context,
+    error: error.message,
+    stack: error.stack
+  });
+}
+```
 
 ## Security Considerations
 
-### API Key Management
-- Keys stored in Greasemonkey storage
-- Never exposed in DOM
-- Optional encryption for sensitive keys
+### API Key Security
+- **Storage**: Keys stored in browser storage (not localStorage)
+- **Transmission**: Keys only sent to official API endpoints
+- **Validation**: Keys validated before use
+- **Cleanup**: Keys cleared on script uninstall
 
 ### Data Privacy
-- Minimal data persistence
-- No tracking or analytics
-- User-controlled data retention
+- **Local Processing**: All data processing happens client-side
+- **No External Storage**: No data sent to third-party servers
+- **User Control**: User can clear all stored data
 
-## Extension Points
-
-### Plugin System (Future)
-- Custom data source plugins
-- Custom field mapping rules
-- Custom validation logic
-
-### Export/Import
-- Context backup/restore
-- Bulk operation templates
-- CSV data exchange
+### XSS Prevention
+- **Input Sanitization**: All user inputs are sanitized
+- **DOM Manipulation**: Safe DOM manipulation techniques
+- **Event Handling**: Proper event handling to prevent injection
 
 ## Performance Optimization
 
-### Lazy Loading
-- Load data only when needed
-- Defer heavy operations
-- Minimize DOM queries
+### API Optimization
+- **Caching**: Cache API responses to avoid redundant calls
+- **Batch Requests**: Group related API calls
+- **Lazy Loading**: Load data only when needed
 
-### Caching Strategy
-- API response caching
-- DOM query result caching
-- Context snapshot restoration
+### DOM Optimization
+- **Efficient Selectors**: Use most efficient CSS selectors
+- **Event Delegation**: Minimize event listener overhead
+- **Memory Management**: Clean up unused DOM references
 
-### Event Debouncing
-- Rate limit API calls
-- Debounce user input
-- Batch DOM updates
+### JavaScript Optimization
+- **Async/Await**: Use modern async patterns
+- **Debouncing**: Debounce user input events
+- **Throttling**: Throttle expensive operations
+
+### Memory Management
+```javascript
+// Cleanup function
+function cleanup() {
+  // Remove event listeners
+  document.removeEventListener('keydown', handleKeydown);
+  
+  // Clear stored data
+  window.tvdbFetchedData = null;
+  window.tvdbEpisodeData = null;
+  
+  // Clear intervals/timeouts
+  clearTimeout(window.tvdbTimeout);
+  clearInterval(window.tvdbInterval);
+}
+```
+
+## Browser Compatibility
+
+### Supported Browsers
+- **Chrome**: 80+ (with Tampermonkey)
+- **Firefox**: 75+ (with Tampermonkey)
+- **Safari**: 13+ (with Tampermonkey)
+- **Edge**: 80+ (with Tampermonkey)
+
+### Feature Detection
+```javascript
+// Check for required features
+function checkBrowserSupport() {
+  const features = {
+    fetch: typeof fetch !== 'undefined',
+    asyncAwait: (async () => {}).constructor.name === 'AsyncFunction',
+    localStorage: typeof localStorage !== 'undefined',
+    querySelector: typeof document.querySelector !== 'undefined'
+  };
+  
+  const unsupported = Object.entries(features)
+    .filter(([name, supported]) => !supported)
+    .map(([name]) => name);
+    
+  if (unsupported.length > 0) {
+    throw new Error(`Unsupported features: ${unsupported.join(', ')}`);
+  }
+}
+```
+
+## Testing Strategy
+
+### Unit Testing
+- **Function Testing**: Test individual functions
+- **Mock APIs**: Mock external API responses
+- **Error Scenarios**: Test error handling paths
+
+### Integration Testing
+- **API Integration**: Test with real APIs
+- **Form Interaction**: Test form filling on real TVDB pages
+- **Workflow Testing**: Test complete workflow end-to-end
+
+### User Testing
+- **Usability Testing**: Test with real users
+- **Browser Testing**: Test across different browsers
+- **Performance Testing**: Test with large datasets
+
+## Future Enhancements
+
+### Planned Features
+- **Multi-language Support**: Support for more languages
+- **Batch Processing**: Process multiple series at once
+- **Template System**: Save and reuse common configurations
+- **Advanced Filtering**: Filter episodes by criteria
+
+### Technical Improvements
+- **TypeScript Migration**: Add type safety
+- **Module System**: Break into smaller modules
+- **Testing Framework**: Add comprehensive test suite
+- **Performance Monitoring**: Add performance metrics
+
+### API Enhancements
+- **Additional Sources**: Support for more data sources
+- **Real-time Updates**: Live data updates
+- **Offline Support**: Work without internet connection
