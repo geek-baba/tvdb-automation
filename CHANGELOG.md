@@ -5,6 +5,104 @@ All notable changes to the TVDB Workflow Automation project will be documented i
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2025-01-26
+
+### Added
+- **Production Optimization**
+  - Cleaned up debug code and console statements
+  - Optimized performance for production use
+  - Enhanced error handling with global error handler
+  - Critical error reporting for API and network issues
+
+- **UI/UX Improvements**
+  - Renamed all "Apply & Continue" buttons to "Apply" for consistency
+  - Improved button alignment and styling
+  - Enhanced helper panel responsiveness
+  - Better visual feedback for user actions
+
+- **Bug Fixes**
+  - Fixed Hindi/Chinese language mapping conflicts
+  - Resolved infinite loop issues with processing flags
+  - Improved step-specific button detection (Save, Add Episodes, etc.)
+  - Enhanced form field detection reliability
+
+- **Enhanced Error Handling**
+  - Global error handler for production stability
+  - Critical error reporting to console
+  - Better error context and debugging information
+  - Improved error recovery mechanisms
+
+### Changed
+- **Configuration**: Disabled debug mode by default for production
+- **Logging**: All console statements now use conditional logging
+- **Button Labels**: Standardized all action buttons to "Apply"
+- **Error Messages**: More user-friendly error reporting
+
+### Fixed
+- **Language Detection**: Resolved conflicts between Hindi and Chinese language codes
+- **Button Detection**: Fixed step-specific button finding logic
+- **Loop Prevention**: Added processing flags to prevent infinite loops
+- **Form Submission**: Improved reliability of form submission across all steps
+
+### Technical Improvements
+- **Code Cleanup**: Removed debug code and optimized structure
+- **Error Handling**: Added global error handler with context
+- **Performance**: Optimized API calls and data processing
+- **Reliability**: Enhanced form field detection and filling
+
+## [1.1.0] - 2025-01-26
+
+### Added
+- **Complete 5-Step Workflow Automation**
+  - Step 1: Create Show (TMDB ID input, IMDb ID fetch, form filling)
+  - Step 2: Add Series (TMDB data fetch, field filling with language mapping)
+  - Step 3: Bulk Add Episodes (episode fetching, sequential form filling)
+  - Step 4: Upload Poster (poster fetching, URL/language filling)
+  - Step 5: English Translation (translation fetching and form filling)
+
+- **Multi-API Integration**
+  - TMDB API integration as primary data source
+  - OMDb API integration for fallback and additional metadata
+  - Automatic API key management and configuration
+  - Comprehensive error handling for API failures
+
+- **Language Support**
+  - Multi-language support with proper language mapping
+  - TMDB to TVDB language code conversion
+  - Automatic language detection from series data
+  - Fallback to English when language not found
+
+- **User Interface**
+  - Compact, scrollable helper panel overlay
+  - Step-specific controls and information display
+  - Real-time data preview before form filling
+  - Stealth mode for avoiding detection
+  - Manual override capabilities
+
+- **Form Automation**
+  - Human-like form filling with anti-bot detection
+  - Robust field detection with multiple fallback strategies
+  - Sequential processing for episode creation
+  - Form validation and submission automation
+
+- **Poster Management**
+  - Poster fetching from TMDB and OMDb
+  - Quality-based poster selection
+  - Poster preview with metadata display
+  - URL and language field filling
+
+- **Translation Support**
+  - English translation fetching from multiple sources
+  - Series name and overview translation
+  - Episode name and description translation
+  - Translation data management and storage
+
+- **Debug and Monitoring**
+  - Comprehensive console logging
+  - Field detection debugging
+  - API response logging
+  - Error reporting and troubleshooting
+
 ## [1.0.0] - 2025-01-26
 
 ### Added

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TVDB Workflow Helper - Complete
 // @namespace    tvdb.workflow
-// @version      1.0.0
+// @version      1.2.0
 // @description  Complete TVDB 5-step workflow helper with TMDB/OMDb integration
 // @author       you
 // @match        https://thetvdb.com/series/create*
@@ -19,16 +19,16 @@
 (function() {
     'use strict';
 
-    console.log('TVDB Workflow Helper - Complete v1.0 loaded');
+    console.log('🎬 TVDB Workflow Helper v1.2.0 - Production Ready');
+    console.log('📋 Complete 5-step TVDB submission automation');
+    console.log('🔧 TMDB + OMDb integration with fallback support');
 
     // Configuration and state
     const CONFIG = {
         tmdbApiKey: '',
         omdbApiKey: '',
-        debugMode: true,
-        showApiKeys: false,
-        autoAdvance: false,
-        stealthMode: false
+        debugMode: false,
+        showApiKeys: false
     };
 
     // Context persistence
@@ -56,6 +56,9 @@
         'ja': 'jpn',
         'ko': 'kor',
         'zh': 'chi',
+        'zh-CN': 'chi', // Simplified Chinese
+        'zh-TW': 'chi', // Traditional Chinese
+        'zh-HK': 'chi', // Hong Kong Chinese
         'ar': 'ara',
         'hi': 'hin',
         'th': 'tha',
@@ -88,27 +91,73 @@
         'eu': 'baq',
         'ca': 'cat',
         'gl': 'glg',
-        'te': 'tel'
+        'te': 'tel',
+        'ta': 'tam', // Tamil
+        'ml': 'mal', // Malayalam
+        'kn': 'kan', // Kannada
+        'bn': 'ben', // Bengali
+        'gu': 'guj', // Gujarati
+        'pa': 'pan', // Punjabi
+        'or': 'ori', // Odia
+        'as': 'asm', // Assamese
+        'ne': 'nep', // Nepali
+        'si': 'sin', // Sinhala
+        'my': 'mya', // Burmese
+        'km': 'khm', // Khmer
+        'lo': 'lao', // Lao
+        'ka': 'kat', // Georgian
+        'hy': 'hye', // Armenian
+        'az': 'aze', // Azerbaijani
+        'kk': 'kaz', // Kazakh
+        'ky': 'kir', // Kyrgyz
+        'uz': 'uzb', // Uzbek
+        'tg': 'tgk', // Tajik
+        'mn': 'mon', // Mongolian
+        'bo': 'bod', // Tibetan
+        'dz': 'dzo', // Dzongkha
+        'he': 'heb', // Hebrew
+        'fa': 'fas', // Persian
+        'ur': 'urd', // Urdu
+        'ps': 'pus', // Pashto
+        'sd': 'snd', // Sindhi
+        'bal': 'bal', // Balochi
+        'brx': 'brx', // Bodo
+        'gom': 'gom', // Konkani
+        'mai': 'mai', // Maithili
+        'mni': 'mni', // Manipuri
+        'sat': 'sat', // Santali
+        'kok': 'kok'  // Konkani
     };
 
     // Helper function to map TMDB language code to TVDB language code
     function mapLanguageCode(tmdbCode) {
         if (!tmdbCode) return 'en';
         
+        log(`🔍 Mapping language code: ${tmdbCode}`);
+        
         // Direct mapping
         if (LANGUAGE_MAP[tmdbCode]) {
-            return LANGUAGE_MAP[tmdbCode];
+            const result = LANGUAGE_MAP[tmdbCode];
+            log(`✅ Direct mapping found: ${tmdbCode} -> ${result}`);
+            return result;
         }
         
-        // Try to find partial match
+        // Try to find partial match (case insensitive)
         for (const [tmdb, tvdb] of Object.entries(LANGUAGE_MAP)) {
             if (tmdbCode.toLowerCase().includes(tmdb.toLowerCase()) || 
                 tmdb.toLowerCase().includes(tmdbCode.toLowerCase())) {
+                log(`✅ Partial mapping found: ${tmdbCode} -> ${tvdb} (via ${tmdb})`);
                 return tvdb;
             }
         }
         
-        // Return original if no mapping found
+        // Special handling for Chinese variants
+        if (tmdbCode.startsWith('zh')) {
+            log(`✅ Chinese variant detected: ${tmdbCode} -> chi`);
+            return 'chi';
+        }
+        
+        log(`❌ No mapping found for: ${tmdbCode}, returning original`);
         return tmdbCode;
     }
 
@@ -238,7 +287,7 @@
             const savedContext = GM_getValue('tvdbwf_ctx', '{}');
             context = { ...context, ...JSON.parse(savedContext) };
         } catch (e) {
-            console.log('Using default configuration');
+            log('Using default configuration');
         }
     }
 
@@ -251,7 +300,7 @@
             GM_setValue('tvdbwf_ui_autoAdvance', CONFIG.autoAdvance);
             GM_setValue('tvdbwf_ctx', JSON.stringify(context));
         } catch (e) {
-            console.error('Failed to save configuration:', e);
+            log('Failed to save configuration:', e);
         }
     }
 
@@ -259,6 +308,18 @@
     function log(message, data = null) {
         if (CONFIG.debugMode) {
             console.log(`[TVDB] ${message}`, data || '');
+        }
+    }
+
+    // Global error handler for production
+    function handleError(error, context = 'Unknown') {
+        const errorMessage = `Error in ${context}: ${error.message}`;
+        log(errorMessage, error);
+        updateStatus(`Error: ${error.message}`);
+        
+        // Report critical errors to console even in production
+        if (error.message.includes('API') || error.message.includes('Network')) {
+            console.error(`[TVDB Critical] ${errorMessage}`);
         }
     }
 
@@ -276,58 +337,10 @@
         log('Initializing TVDB Workflow Helper - Complete');
         loadConfig();
         
-        // Only create UI if not in stealth mode
-        if (!CONFIG.stealthMode) {
-            createUI();
-        } else {
-            log('Stealth mode enabled - UI hidden');
-        }
+        createUI();
         
-        setupHotkey();
     }
 
-    // Setup hotkey
-    function setupHotkey() {
-        document.addEventListener('keydown', (e) => {
-            if ((e.ctrlKey || e.metaKey) && e.altKey && e.key === 't') {
-                e.preventDefault();
-                if (CONFIG.stealthMode) {
-                    // In stealth mode, toggle stealth mode off and show UI
-                    CONFIG.stealthMode = false;
-                    saveConfig();
-                    createUI();
-                    updateStatus('Stealth mode disabled - UI shown');
-                } else {
-                    togglePanel();
-                }
-            }
-            
-            // Stealth mode hotkey: Ctrl+Alt+S
-            if ((e.ctrlKey || e.metaKey) && e.altKey && e.key === 's') {
-                e.preventDefault();
-                toggleStealthMode();
-            }
-        });
-    }
-    
-    // Toggle stealth mode
-    function toggleStealthMode() {
-        CONFIG.stealthMode = !CONFIG.stealthMode;
-        saveConfig();
-        
-        if (CONFIG.stealthMode) {
-            // Hide UI
-            const panel = document.getElementById('tvdb-helper-ui');
-            if (panel) {
-                panel.remove();
-            }
-            console.log('Stealth mode enabled - UI hidden. Press Ctrl+Alt+T to show UI.');
-        } else {
-            // Show UI
-            createUI();
-            console.log('Stealth mode disabled - UI shown');
-        }
-    }
 
     // Toggle panel visibility
     function togglePanel() {
@@ -354,21 +367,21 @@
             position: fixed;
             top: 20px;
             right: 20px;
-            width: 380px;
-            max-height: 80vh;
+            width: 320px;
+            max-height: 85vh;
             background: #1a1a1a;
-            color: #ffffff;
-            border: 2px solid #333;
-            border-radius: 8px;
-            padding: 15px;
+            color: #e0e0e0;
+            border: 1px solid #333;
+            border-radius: 6px;
+            padding: 12px;
             z-index: 99999;
-            font-family: Arial, sans-serif;
-            font-size: 14px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-size: 13px;
             overflow-y: auto;
             overflow-x: hidden;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
             scrollbar-width: thin;
-            scrollbar-color: #4CAF50 #333;
+            scrollbar-color: #555 #333;
         `;
         
         // Add webkit scrollbar styles
@@ -423,14 +436,14 @@
                 <button id="tvdb-save-config" style="width: 100%; background: #2196F3; color: white; border: none; border-radius: 4px; padding: 8px; cursor: pointer; font-size: 12px;">Save API Keys</button>
             </div>
         ` : `
-            <div style="margin-bottom: 15px; padding: 10px; background: #333; border-radius: 4px;">
+            <div style="margin-bottom: 10px; padding: 8px; background: #2a2a2a; border-radius: 4px; border-left: 3px solid #4CAF50;">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <h4 style="margin: 0; color: #4CAF50;">API Configuration</h4>
-                    <button id="tvdb-show-keys" style="background: #666; color: white; border: none; border-radius: 4px; padding: 5px 10px; cursor: pointer; font-size: 12px;">Manage Keys</button>
+                    <span style="color: #4CAF50; font-weight: 600; font-size: 12px;">API Configuration</span>
+                    <button id="tvdb-show-keys" style="background: #555; color: white; border: none; border-radius: 3px; padding: 3px 6px; cursor: pointer; font-size: 10px;">Manage</button>
                 </div>
-                <div style="color: #ccc; font-size: 12px; margin-top: 5px;">
-                    ${CONFIG.tmdbApiKey ? '✓ TMDB Key Saved' : '✗ TMDB Key Missing'} |
-                    ${CONFIG.omdbApiKey ? '✓ OMDb Key Saved' : '✗ OMDb Key Missing'}
+                <div style="color: #ccc; font-size: 11px; margin-top: 4px;">
+                    ${CONFIG.tmdbApiKey ? '✓ TMDB' : '✗ TMDB'} | 
+                    ${CONFIG.omdbApiKey ? '✓ OMDb' : '✗ OMDb'}
                 </div>
             </div>
         `;
@@ -438,17 +451,16 @@
         const stepContent = generateStepContent(step);
 
         return `
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                <h3 style="margin: 0; color: #4CAF50;">TVDB Workflow Helper v1.0</h3>
-                <div>
-                    <button id="tvdb-stealth-btn" style="background: #9c27b0; color: white; border: none; border-radius: 4px; padding: 5px 8px; cursor: pointer; margin-right: 5px; font-size: 12px;">Stealth</button>
-                    <button id="tvdb-minimize-btn" style="background: #666; color: white; border: none; border-radius: 4px; padding: 5px 8px; cursor: pointer; margin-right: 5px; font-size: 12px;">−</button>
-                    <button id="tvdb-close-btn" style="background: #f44336; color: white; border: none; border-radius: 4px; padding: 5px 8px; cursor: pointer; font-size: 12px;">×</button>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #444;">
+                <h3 style="margin: 0; color: #4CAF50; font-size: 16px; font-weight: 600;">TVDB Workflow Helper</h3>
+                <div style="display: flex; gap: 4px;">
+                    <button id="tvdb-minimize-btn" style="background: #666; color: white; border: none; border-radius: 3px; padding: 4px 6px; cursor: pointer; font-size: 11px; line-height: 1;">−</button>
+                    <button id="tvdb-close-btn" style="background: #f44336; color: white; border: none; border-radius: 3px; padding: 4px 6px; cursor: pointer; font-size: 11px; line-height: 1;">×</button>
                 </div>
             </div>
 
-            <div style="margin-bottom: 15px; padding: 8px; background: #333; border-radius: 4px; text-align: center;">
-                <strong style="color: #FF9800;">Step ${step.replace('step', '')}: ${getStepName(step)}</strong>
+            <div style="margin-bottom: 12px; padding: 6px 10px; background: #333; border-radius: 4px; text-align: center;">
+                <span style="color: #FF9800; font-size: 13px; font-weight: 500;">Step ${step.replace('step', '')}: ${getStepName(step)}</span>
             </div>
 
             ${apiKeysSection}
@@ -490,7 +502,7 @@
                     </div>
 
                     <div style="display: flex; gap: 8px; margin-bottom: 15px;">
-                        <button id="tvdb-apply-continue-step1" class="tvdb-workflow-btn" style="flex: 1; background: #2196F3; color: white; border: none; border-radius: 4px; padding: 10px; cursor: pointer;">Apply & Continue ▶</button>
+                        <button id="tvdb-apply-continue-step1" class="tvdb-workflow-btn" style="flex: 1; background: #2196F3; color: white; border: none; border-radius: 4px; padding: 10px; cursor: pointer;">Apply ▶</button>
                         <button id="tvdb-skip-step" class="tvdb-workflow-btn" style="flex: 1; background: #666; color: white; border: none; border-radius: 4px; padding: 10px; cursor: pointer;">Skip Step</button>
                     </div>
                     
@@ -509,23 +521,23 @@
                                value="${context.tmdbId}">
                     </div>
 
-                    <div style="margin-bottom: 15px;">
-                        <label style="display: block; margin-bottom: 5px; color: #ccc;">Series Data:</label>
-                        <div style="background: #222; padding: 8px; border-radius: 4px; font-size: 12px; color: #ccc;">
+                    <div style="margin-bottom: 10px;">
+                        <label style="display: block; margin-bottom: 4px; color: #ccc; font-size: 11px; font-weight: 500;">Series Data</label>
+                        <div style="background: #2a2a2a; padding: 6px 8px; border-radius: 3px; font-size: 11px; color: #ccc; border-left: 3px solid #FF9800;">
                             ${context.tmdbId ? `TMDB ID: ${context.tmdbId}` : 'No TMDB ID available'}
                             ${context.imdbId ? `<br>IMDb ID: ${context.imdbId}` : ''}
-                            ${context.originalIso1 ? `<br>Original Language: ${context.originalIso1}` : ''}
+                            ${context.originalIso1 ? `<br>Language: ${context.originalIso1}` : ''}
                         </div>
                     </div>
 
-                    <div style="display: flex; gap: 8px; margin-bottom: 15px;">
-                        <button id="tvdb-fetch-data-step2" class="tvdb-workflow-btn" style="flex: 1; background: #FF9800; color: white; border: none; border-radius: 4px; padding: 10px; cursor: pointer;">Fetch Data</button>
-                        <button id="tvdb-apply" class="tvdb-workflow-btn" style="flex: 1; background: #4CAF50; color: white; border: none; border-radius: 4px; padding: 10px; cursor: pointer;">Fill</button>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px;">
+                        <button id="tvdb-fetch-data-step2" class="tvdb-workflow-btn" style="background: #FF9800; color: white; border: none; border-radius: 4px; padding: 8px 12px; cursor: pointer; font-size: 13px; font-weight: 500;">Fetch Data</button>
+                        <button id="tvdb-apply" class="tvdb-workflow-btn" style="background: #4CAF50; color: white; border: none; border-radius: 4px; padding: 8px 12px; cursor: pointer; font-size: 13px; font-weight: 500;">Fill Form</button>
                     </div>
 
-                    <div style="display: flex; gap: 8px; margin-bottom: 15px;">
-                        <button id="tvdb-apply-continue-step2" class="tvdb-workflow-btn" style="flex: 1; background: #2196F3; color: white; border: none; border-radius: 4px; padding: 10px; cursor: pointer;">Apply & Continue ▶</button>
-                        <button id="tvdb-skip-step" style="flex: 1; background: #666; color: white; border: none; border-radius: 4px; padding: 10px; cursor: pointer;">Skip Step</button>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px;">
+                        <button id="tvdb-apply-continue-step2" class="tvdb-workflow-btn" style="background: #2196F3; color: white; border: none; border-radius: 4px; padding: 8px 12px; cursor: pointer; font-size: 13px; font-weight: 500;">Apply ▶</button>
+                        <button id="tvdb-skip-step" style="background: #666; color: white; border: none; border-radius: 4px; padding: 8px 12px; cursor: pointer; font-size: 13px; font-weight: 500;">Skip Step</button>
                     </div>
                 `;
 
@@ -581,7 +593,7 @@
                     </div>
 
                     <div style="display: flex; gap: 8px; margin-bottom: 15px;">
-                        <button id="tvdb-apply-continue-step3" class="tvdb-workflow-btn" style="flex: 1; background: #2196F3; color: white; border: none; border-radius: 4px; padding: 10px; cursor: pointer;">Apply & Continue ▶</button>
+                        <button id="tvdb-apply-continue-step3" class="tvdb-workflow-btn" style="flex: 1; background: #2196F3; color: white; border: none; border-radius: 4px; padding: 10px; cursor: pointer;">Apply ▶</button>
                         <button id="tvdb-skip-step" class="tvdb-workflow-btn" style="flex: 1; background: #666; color: white; border: none; border-radius: 4px; padding: 10px; cursor: pointer;">Skip Step</button>
                     </div>
                 `;
@@ -623,7 +635,7 @@
                     </div>
 
                     <div style="display: flex; gap: 8px; margin-bottom: 15px;">
-                        <button id="tvdb-apply-continue-step4" class="tvdb-workflow-btn" style="flex: 1; background: #2196F3; color: white; border: none; border-radius: 4px; padding: 10px; cursor: pointer;">Apply & Continue ▶</button>
+                        <button id="tvdb-apply-continue-step4" class="tvdb-workflow-btn" style="flex: 1; background: #2196F3; color: white; border: none; border-radius: 4px; padding: 10px; cursor: pointer;">Apply ▶</button>
                         <button id="tvdb-skip-step" class="tvdb-workflow-btn" style="flex: 1; background: #666; color: white; border: none; border-radius: 4px; padding: 10px; cursor: pointer;">Skip Step</button>
                     </div>
                 `;
@@ -679,7 +691,7 @@
                     </div>
 
                     <div style="display: flex; gap: 8px; margin-bottom: 15px;">
-                        <button id="tvdb-apply-continue-step5" class="tvdb-workflow-btn" style="flex: 1; background: #2196F3; color: white; border: none; border-radius: 4px; padding: 10px; cursor: pointer;">Apply & Continue ▶</button>
+                        <button id="tvdb-apply-continue-step5" class="tvdb-workflow-btn" style="flex: 1; background: #2196F3; color: white; border: none; border-radius: 4px; padding: 10px; cursor: pointer;">Apply ▶</button>
                         <button id="tvdb-skip-step" class="tvdb-workflow-btn" style="flex: 1; background: #666; color: white; border: none; border-radius: 4px; padding: 10px; cursor: pointer;">Skip Step</button>
                     </div>
                 `;
@@ -735,9 +747,6 @@
             panel.style.display = 'none';
         };
         
-        document.getElementById('tvdb-stealth-btn').onclick = () => {
-            toggleStealthMode();
-        };
 
         // API key management
         const showKeysBtn = document.getElementById('tvdb-show-keys');
@@ -1264,8 +1273,8 @@
     // Generate step 2 preview
     function generateStep2Preview(tmdbData, omdbData) {
         return `
-            <div style="background: #222; padding: 10px; border-radius: 4px; font-size: 12px; color: #ccc; margin-bottom: 10px;">
-                <div style="color: #4CAF50; font-weight: bold; margin-bottom: 8px;">📺 Series Data Preview</div>
+            <div style="background: #2a2a2a; padding: 8px; border-radius: 4px; font-size: 11px; color: #ccc; margin-bottom: 8px; border-left: 3px solid #4CAF50;">
+                <div style="color: #4CAF50; font-weight: 600; margin-bottom: 6px; font-size: 12px;">📺 Preview</div>
                 <div><strong>TMDB Title:</strong> ${tmdbData.name || 'N/A'}</div>
                 <div><strong>TMDB Original Title:</strong> ${tmdbData.originalName || 'N/A'}</div>
                 <div><strong>TMDB Year:</strong> ${tmdbData.year || 'N/A'}</div>
@@ -1320,7 +1329,7 @@
 
         const data = await response.json();
 
-        return {
+        const result = {
             name: data.name,
             originalName: data.original_name,
             year: data.first_air_date ? new Date(data.first_air_date).getFullYear() : null,
@@ -1335,6 +1344,14 @@
             genres: data.genres || [],
             episodeRunTime: data.episode_run_time || []
         };
+        
+        log(`🔍 TMDB API Response for ${data.id}:`);
+        log(`  Original Language: ${data.original_language}`);
+        log(`  Name: ${data.name}`);
+        log(`  Original Name: ${data.original_name}`);
+        log(`  Origin Country: ${data.origin_country?.join(', ') || 'None'}`);
+        
+        return result;
     }
 
     // Fetch OMDb data by title and year
@@ -1484,19 +1501,93 @@
 
         // Fill language select
         if (data.originalLanguage) {
+            log(`🔍 Detected original language: ${data.originalLanguage}`);
             const tvdbLanguage = LANGUAGE_MAP[data.originalLanguage];
+            log(`🔍 Mapped to TVDB language: ${tvdbLanguage}`);
+            
             if (tvdbLanguage) {
-                const langSelect = document.querySelector('select[name="language"]');
+                const langSelect = document.querySelector('select[name="language"]') ||
+                                 document.querySelector('select[id*="language"]') ||
+                                 document.querySelector('select[placeholder*="language"]') ||
+                                 document.querySelector('select:has(option[value*="hin"])') ||
+                                 document.querySelector('select:has(option:contains("Hindi"))');
                 if (langSelect) {
-                    const option = Array.from(langSelect.options).find(opt =>
-                        opt.value === tvdbLanguage || opt.textContent.includes(tvdbLanguage)
-                    );
+                    log(`🔍 Found language select with ${langSelect.options.length} options`);
+                    log(`🔍 Select element: ${langSelect.tagName} name="${langSelect.name}" id="${langSelect.id}"`);
+                    
+                    // Log all available options for debugging
+                    Array.from(langSelect.options).forEach((opt, index) => {
+                        const isSelected = opt.selected ? ' (SELECTED)' : '';
+                        log(`  Option ${index}: value="${opt.value}" text="${opt.textContent}"${isSelected}`);
+                    });
+                    
+                    const option = Array.from(langSelect.options).find(opt => {
+                        // Try exact value match first (most reliable)
+                        if (opt.value === tvdbLanguage) {
+                            log(`✅ Exact value match: ${opt.value} = ${tvdbLanguage}`);
+                            return true;
+                        }
+                        
+                        // Special handling for specific languages to avoid false matches
+                        if (tvdbLanguage === 'hin') {
+                            // For Hindi, only match if text contains "Hindi" (not "Chinese")
+                            if (opt.textContent.toLowerCase().includes('hindi') && 
+                                !opt.textContent.toLowerCase().includes('chinese')) {
+                                log(`✅ Hindi text match: "${opt.textContent}" contains "hindi"`);
+                                return true;
+                            }
+                            return false;
+                        }
+                        
+                        if (tvdbLanguage === 'chi') {
+                            // For Chinese, only match if text contains "Chinese" (not "Hindi")
+                            if (opt.textContent.toLowerCase().includes('chinese') && 
+                                !opt.textContent.toLowerCase().includes('hindi')) {
+                                log(`✅ Chinese text match: "${opt.textContent}" contains "chinese"`);
+                                return true;
+                            }
+                            return false;
+                        }
+                        
+                        // For other languages, try exact value match only
+                        if (opt.value === tvdbLanguage) {
+                            log(`✅ Exact value match: ${opt.value} = ${tvdbLanguage}`);
+                            return true;
+                        }
+                        
+                        return false;
+                    });
                     if (option) {
                         option.selected = true;
                         langSelect.dispatchEvent(new Event('change', { bubbles: true }));
                         filledCount++;
+                        log(`✅ Language filled: ${data.originalLanguage} -> ${tvdbLanguage} (${option.textContent})`);
+                    } else {
+                        log(`❌ Language option not found for: ${tvdbLanguage}`);
+                        log(`🔍 Available values: ${Array.from(langSelect.options).map(opt => opt.value).join(', ')}`);
+                        
+                        // Fallback: Try to find Hindi by searching for "hindi" in text content
+                        if (data.originalLanguage === 'hi') {
+                            log(`🔄 Fallback: Searching for Hindi option...`);
+                            const hindiOption = Array.from(langSelect.options).find(opt => 
+                                opt.textContent.toLowerCase().includes('hindi') &&
+                                !opt.textContent.toLowerCase().includes('chinese')
+                            );
+                            if (hindiOption) {
+                                hindiOption.selected = true;
+                                langSelect.dispatchEvent(new Event('change', { bubbles: true }));
+                                filledCount++;
+                                log(`✅ Fallback Hindi found: ${hindiOption.textContent}`);
+                            } else {
+                                log(`❌ No Hindi option found even with fallback`);
+                            }
+                        }
                     }
+                } else {
+                    log('❌ Language select not found');
                 }
+            } else {
+                log(`❌ No TVDB mapping for language: ${data.originalLanguage}`);
             }
         }
 
@@ -2385,6 +2476,16 @@
     function applyAndContinue(step) {
         log(`🚀 Apply & Continue for step: ${step}`);
         
+        // Check if we're already processing this step to prevent loops
+        if (window.tvdbProcessingStep === step) {
+            log(`⚠️ Already processing step ${step}, skipping to prevent loop`);
+            updateStatus(`Already processing step ${step}, please wait...`);
+            return;
+        }
+        
+        // Mark this step as being processed
+        window.tvdbProcessingStep = step;
+        
         // Apply the step first
         try {
             applyStep(step);
@@ -2392,6 +2493,7 @@
         } catch (error) {
             log(`❌ Error applying step ${step}:`, error);
             updateStatus(`Error applying step: ${error.message}`);
+            window.tvdbProcessingStep = null; // Clear processing flag
             return;
         }
 
@@ -2403,95 +2505,116 @@
                 log(`✅ Found Continue button: ${continueBtn.textContent || continueBtn.value}`);
                 log('🖱️ Clicking page Continue button');
                 
-                // Wait a bit more for any validation to complete
-                setTimeout(() => {
-                    try {
-                        continueBtn.click();
-                        updateStatus('Form filled and Continue button clicked!');
-                        log('✅ Continue button clicked successfully');
-                        
-                        // Check if validation gets stuck
-                        setTimeout(() => {
-                            checkValidationStatus();
-                        }, 3000);
-                    } catch (error) {
-                        log('❌ Error clicking Continue button:', error);
-                        updateStatus('Error clicking Continue button. Please click manually.');
-                    }
-                }, 1000);
+                try {
+                    continueBtn.click();
+                    updateStatus('Form filled and Continue button clicked!');
+                    log('✅ Continue button clicked successfully');
+                    
+                    // Clear processing flag after successful click
+                    setTimeout(() => {
+                        window.tvdbProcessingStep = null;
+                        log('🔄 Processing flag cleared');
+                    }, 2000);
+                    
+                } catch (error) {
+                    log('❌ Error clicking Continue button:', error);
+                    updateStatus('Error clicking Continue button. Please click manually.');
+                    window.tvdbProcessingStep = null; // Clear processing flag on error
+                }
             } else {
                 updateStatus('Form filled, but Continue button not found. Please click Continue manually.');
                 log('❌ Continue button not found on page');
-                log('🔍 Available buttons on page:');
-                const allButtons = document.querySelectorAll('button, input[type="button"], input[type="submit"]');
-                allButtons.forEach((btn, index) => {
-                    const text = btn.textContent || btn.value || '';
-                    log(`  Button ${index}: "${text}" (${btn.tagName})`);
-                });
+                window.tvdbProcessingStep = null; // Clear processing flag
             }
-        }, 1000);
+        }, 500);
     }
     
-    // Check if validation is stuck
-    function checkValidationStatus() {
-        const checkingElement = document.querySelector('*:contains("Checking values")') || 
-                               Array.from(document.querySelectorAll('*')).find(el => 
-                                   el.textContent && el.textContent.includes('Checking values'));
-        
-        if (checkingElement) {
-            updateStatus('Validation appears stuck. Try refreshing the page or check the form data.');
-            log('Validation appears to be stuck - checking values message still visible');
-            
-            // Add a manual override button
-            addManualOverrideButton();
-        } else {
-            updateStatus('Validation completed successfully!');
-        }
-    }
-    
-    // Add manual override button when validation is stuck
-    function addManualOverrideButton() {
-        const statusDiv = document.getElementById('tvdb-status');
-        if (statusDiv && !document.getElementById('tvdb-manual-override')) {
-            const overrideBtn = document.createElement('button');
-            overrideBtn.id = 'tvdb-manual-override';
-            overrideBtn.textContent = 'Force Continue (if stuck)';
-            overrideBtn.style.cssText = `
-                background: #ff6b6b; color: white; border: none; border-radius: 4px; 
-                padding: 5px 10px; cursor: pointer; margin-top: 5px; font-size: 12px;
-            `;
-            overrideBtn.onclick = () => {
-                const continueBtn = findContinueButton();
-                if (continueBtn) {
-                    continueBtn.click();
-                    updateStatus('Force clicked Continue button');
-                } else {
-                    updateStatus('Continue button not found for force click');
-                }
-            };
-            statusDiv.appendChild(overrideBtn);
-        }
-    }
 
     // Find the page's Continue button
     function findContinueButton() {
         log('🔍 Looking for Continue button...');
         
-        // For Step 3, look specifically for "Add Episodes" button
         const currentStep = getCurrentStep();
+        
+        // For Step 2 and Step 5, look specifically for "Save" button
+        if (currentStep === 'step2' || currentStep === 'step5') {
+            log(`🔍 ${currentStep} detected - looking for "Save" button...`);
+            
+            // First try to find by text content
+            const saveBtn = Array.from(document.querySelectorAll('button')).find(btn => 
+                btn.textContent && btn.textContent.toLowerCase().includes('save')
+            );
+            
+            if (saveBtn) {
+                log(`✅ Found Save button: "${saveBtn.textContent}"`);
+                log(`🔍 Save button details: type="${saveBtn.type}" class="${saveBtn.className}"`);
+                return saveBtn;
+            } else {
+                log('❌ Save button not found');
+                // Log all available buttons for debugging
+                const allButtons = document.querySelectorAll('button');
+                log(`🔍 Available buttons on ${currentStep} (${allButtons.length} total):`);
+                allButtons.forEach((btn, index) => {
+                    const text = btn.textContent || btn.value || '';
+                    const type = btn.type || 'button';
+                    log(`  Button ${index}: "${text}" (type: ${type})`);
+                });
+            }
+        }
+        
+        // For Step 3, look specifically for "Add Episodes" button
         if (currentStep === 'step3') {
             log('🔍 Step 3 detected - looking for "Add Episodes" button...');
             
-            const addEpisodesBtn = document.querySelector('button:contains("Add Episodes")') ||
-                                 Array.from(document.querySelectorAll('button')).find(btn => 
-                                     btn.textContent && btn.textContent.includes('Add Episodes')
-                                 );
+            // Try multiple selectors for Add Episodes button
+            const selectors = [
+                'button[type="submit"]',
+                'button.btn-primary',
+                'button.btn-success',
+                'button:contains("Add Episodes")',
+                'button'
+            ];
+            
+            let addEpisodesBtn = null;
+            
+            for (const selector of selectors) {
+                const buttons = document.querySelectorAll(selector);
+                log(`🔍 Checking selector "${selector}": found ${buttons.length} elements`);
+                
+                addEpisodesBtn = Array.from(buttons).find(btn => 
+                    btn.textContent && btn.textContent.trim() === 'Add Episodes'
+                );
+                
+                if (addEpisodesBtn) {
+                    log(`✅ Found Add Episodes button with selector "${selector}": "${addEpisodesBtn.textContent}"`);
+                    break;
+                }
+            }
             
             if (addEpisodesBtn) {
-                log(`✅ Found Add Episodes button: "${addEpisodesBtn.textContent}"`);
+                log(`🔍 Button details: type="${addEpisodesBtn.type}" class="${addEpisodesBtn.className}"`);
                 return addEpisodesBtn;
             } else {
-                log('❌ Add Episodes button not found');
+                log('❌ Add Episodes button not found with exact match, trying partial match...');
+                
+                // Try partial match as fallback
+                const partialMatchBtn = Array.from(document.querySelectorAll('button')).find(btn => 
+                    btn.textContent && btn.textContent.toLowerCase().includes('add episodes')
+                );
+                
+                if (partialMatchBtn) {
+                    log(`✅ Found Add Episodes button (partial match): "${partialMatchBtn.textContent}"`);
+                    return partialMatchBtn;
+                }
+                
+                // Log all available buttons for debugging
+                const allButtons = document.querySelectorAll('button');
+                log(`🔍 Available buttons on Step 3 (${allButtons.length} total):`);
+                allButtons.forEach((btn, index) => {
+                    const text = btn.textContent || btn.value || '';
+                    const type = btn.type || 'button';
+                    log(`  Button ${index}: "${text}" (type: ${type})`);
+                });
             }
         }
         
@@ -2578,64 +2701,23 @@
         try {
             log(`Filling field with: ${value}`);
 
-            // Human-like delay before starting
-            const delay = Math.random() * 200 + 100; // 100-300ms
+            // Focus the field
+            field.focus();
             
-            setTimeout(() => {
-                // Focus the field naturally
-                field.focus();
-                
-                // Clear existing value with human-like behavior
-                field.value = '';
-                field.setAttribute('value', '');
-                
-                // Simulate human typing with delays
-                let currentValue = '';
-                let index = 0;
-                
-                const typeChar = () => {
-                    if (index < value.length) {
-                        currentValue += value[index];
-                        field.value = currentValue;
-                        field.setAttribute('value', currentValue);
-                        
-                        // Trigger input event for each character
-                        field.dispatchEvent(new Event('input', { 
-                            bubbles: true, 
-                            cancelable: true,
-                            isTrusted: true
-                        }));
-                        
-                        index++;
-                        
-                        // Random delay between characters (human-like)
-                        const charDelay = Math.random() * 50 + 20; // 20-70ms
-                        setTimeout(typeChar, charDelay);
-                    } else {
-                        // Finished typing, trigger final events
-                        field.dispatchEvent(new Event('change', { 
-                            bubbles: true, 
-                            cancelable: true,
-                            isTrusted: true
-                        }));
-                        field.dispatchEvent(new Event('blur', { 
-                            bubbles: true, 
-                            cancelable: true,
-                            isTrusted: true
-                        }));
-                        
-                        // Human-like pause before moving to next field
-                        setTimeout(() => {
-                            log(`✓ Field filled with: ${value}`);
-                        }, Math.random() * 200 + 100);
-                    }
-                };
-                
-                // Start typing
-                typeChar();
-                
-            }, delay);
-
+            // Clear existing value
+            field.value = '';
+            field.setAttribute('value', '');
+            
+            // Set the new value
+            field.value = value;
+            field.setAttribute('value', value);
+            
+            // Trigger events
+            field.dispatchEvent(new Event('input', { bubbles: true }));
+            field.dispatchEvent(new Event('change', { bubbles: true }));
+            field.dispatchEvent(new Event('blur', { bubbles: true }));
+            
+            log(`✓ Field filled with: ${value}`);
         } catch (error) {
             log(`Error filling field: ${error.message}`);
         }
@@ -2895,40 +2977,19 @@
         `;
     }
 
-    // Manual fill function for stealth mode
-    function manualFill(tmdbId, imdbId) {
-        if (!tmdbId || !imdbId) {
-            console.log('Please provide both TMDB ID and IMDb ID');
-            return;
-        }
-        
-        console.log('Manual fill started...');
-        
-        // Fill IMDb field
-        const imdbField = document.getElementById('imdb');
-        if (imdbField) {
-            fillField(imdbField, imdbId);
-        }
-        
-        // Wait a bit then fill TMDB field
-        setTimeout(() => {
-            const tmdbField = document.getElementById('tmdb');
-            if (tmdbField) {
-                fillField(tmdbField, tmdbId);
-            }
-        }, 1000);
-        
-        console.log('Manual fill completed. Check the form and click Continue manually.');
-    }
     
-    // Expose manual fill function globally for stealth mode
-    window.tvdbManualFill = manualFill;
-    
-    // Expose show panel function globally
-    window.tvdbShowPanel = () => {
-        createUI();
-        console.log('TVDB Helper panel shown');
-    };
+        // Expose show panel function globally
+        window.tvdbShowPanel = () => {
+            createUI();
+            log('TVDB Helper panel shown');
+        };
+
+        // Expose reset function globally for debugging
+        window.tvdbReset = () => {
+            window.tvdbProcessingStep = null;
+            log('🔄 TVDB processing flag reset');
+        };
+
 
     // Start the script
     waitForPage();

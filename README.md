@@ -166,14 +166,22 @@ tvdb-automation/
 
 ## 🔄 Version History
 
-### v1.0.0 (Current)
+### v1.2.0 (Production Ready - Current)
+- ✅ **Production Optimized**: Cleaned up debug code, optimized performance
+- ✅ **Enhanced Error Handling**: Global error handler with critical error reporting
+- ✅ **UI Consistency**: All "Apply & Continue" buttons renamed to "Apply" for consistency
+- ✅ **Step-Specific Button Logic**: Proper button detection for each step (Save, Add Episodes, etc.)
+- ✅ **Language Detection Fix**: Resolved Hindi/Chinese language mapping conflicts
+- ✅ **Loop Prevention**: Fixed infinite loop issues with processing flags
+- ✅ **Complete 5-Step Workflow**: Fully functional end-to-end automation
+
+### v1.1.0 (Previous)
 - ✅ Complete 5-step workflow automation
 - ✅ TMDB and OMDb API integration
-- ✅ Multi-language support
+- ✅ Multi-language support (130+ languages)
 - ✅ Poster management system
 - ✅ Translation support
-- ✅ Stealth mode and manual overrides
-- ✅ Comprehensive error handling
+- ✅ Manual overrides and error recovery
 
 ## 🤝 Contributing
 
