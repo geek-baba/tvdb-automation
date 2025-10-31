@@ -166,7 +166,16 @@ tvdb-automation/
 
 ## 🔄 Version History
 
-### v1.2.0 (Production Ready - Current)
+### v1.3.0 (Production Ready - Current)
+- ✅ **Translation Support for Step 2**: Automatic and manual translation of titles/overviews to original language
+- ✅ **Translation Services**: LibreTranslate and MyMemory API integration
+- ✅ **Manual Translation Buttons**: "Translate Title" and "Translate Overview" buttons in Step 2
+- ✅ **Enhanced TMDB Fetching**: Fetches data in original language when available
+- ✅ **Smart English Detection**: Automatic detection of English content needing translation
+- ✅ **Translation Settings**: Configurable translation service in API settings panel
+- ✅ **Visual Indicators**: Preview warnings when English content is detected
+
+### v1.2.0 (Previous)
 - ✅ **Production Optimized**: Cleaned up debug code, optimized performance
 - ✅ **Enhanced Error Handling**: Global error handler with critical error reporting
 - ✅ **UI Consistency**: All "Apply & Continue" buttons renamed to "Apply" for consistency
