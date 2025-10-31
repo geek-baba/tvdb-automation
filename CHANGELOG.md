@@ -5,6 +5,49 @@ All notable changes to the TVDB Workflow Automation project will be documented i
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2025-01-27
+
+### Added
+- **Translation Support for Step 2**
+  - Automatic translation detection and translation for titles and overviews
+  - Support for translating English content to original language when TMDB data is missing
+  - Integration with LibreTranslate and MyMemory translation APIs
+  - Automatic English language detection using heuristic analysis
+  - Manual translation buttons for title and overview in Step 2
+
+- **Translation Services**
+  - LibreTranslate integration (free public API)
+  - MyMemory Translation API integration (free tier)
+  - Configurable translation service selection in settings
+  - Automatic fallback between translation endpoints
+
+- **Enhanced TMDB Data Fetching**
+  - Fetches TMDB data with original language parameter when available
+  - Checks if returned data is actually in original language
+  - Automatic detection when TMDB returns English despite language parameter
+
+- **UI Enhancements**
+  - Translation settings section in API configuration
+  - Visual indicators in preview when English content is detected
+  - Manual "Translate Title" and "Translate Overview" buttons in Step 2
+  - Real-time preview updates after translation
+  - Status messages showing translation progress
+
+### Changed
+- **Step 2 Workflow**: Now automatically attempts to translate content when original language data is missing
+- **Preview Display**: Shows warning indicators when English content is detected for non-English shows
+- **Translation Logic**: Enhanced detection and translation workflow with better error handling
+
+### Fixed
+- **Language Detection**: Improved detection of English content in titles and overviews
+- **TMDB Data Fetching**: Now attempts to fetch in original language before falling back to translation
+
+### Technical Improvements
+- Added `@connect` directives for translation API endpoints
+- Improved error handling in translation functions
+- Better status feedback during translation process
+- Enhanced logging for translation operations
+
 ## [1.2.0] - 2025-01-26
 
 ### Added

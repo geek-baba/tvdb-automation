@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TVDB Workflow Helper - Complete
 // @namespace    tvdb.workflow
-// @version      1.2.0
+// @version      1.3.0
 // @description  Complete TVDB 5-step workflow helper with TMDB/OMDb integration
 // @author       you
 // @match        https://thetvdb.com/series/create*
@@ -14,12 +14,15 @@
 // @grant        GM_getValue
 // @connect      api.themoviedb.org
 // @connect      www.omdbapi.com
+// @connect      libretranslate.com
+// @connect      libretranslate.de
+// @connect      api.mymemory.translated.net
 // ==/UserScript==
 
 (function() {
     'use strict';
 
-    console.log('🎬 TVDB Workflow Helper v1.2.0 - Production Ready');
+    console.log('🎬 TVDB Workflow Helper v1.3.0 - Production Ready');
     console.log('📋 Complete 5-step TVDB submission automation');
     console.log('🔧 TMDB + OMDb integration with fallback support');
 
@@ -28,7 +31,9 @@
         tmdbApiKey: '',
         omdbApiKey: '',
         debugMode: false,
-        showApiKeys: false
+        showApiKeys: false,
+        translationService: 'libretranslate', // 'libretranslate', 'mymemory', or 'none'
+        enableTranslation: true
     };
 
     // Context persistence
@@ -283,6 +288,8 @@
             CONFIG.omdbApiKey = GM_getValue('tvdbwf_omdb_key', '');
             CONFIG.showApiKeys = GM_getValue('tvdbwf_ui_showKeys', false);
             CONFIG.autoAdvance = GM_getValue('tvdbwf_ui_autoAdvance', false);
+            CONFIG.translationService = GM_getValue('tvdbwf_translation_service', 'libretranslate');
+            CONFIG.enableTranslation = GM_getValue('tvdbwf_enable_translation', true);
 
             const savedContext = GM_getValue('tvdbwf_ctx', '{}');
             context = { ...context, ...JSON.parse(savedContext) };
@@ -298,6 +305,8 @@
             GM_setValue('tvdbwf_omdb_key', CONFIG.omdbApiKey);
             GM_setValue('tvdbwf_ui_showKeys', CONFIG.showApiKeys);
             GM_setValue('tvdbwf_ui_autoAdvance', CONFIG.autoAdvance);
+            GM_setValue('tvdbwf_translation_service', CONFIG.translationService);
+            GM_setValue('tvdbwf_enable_translation', CONFIG.enableTranslation);
             GM_setValue('tvdbwf_ctx', JSON.stringify(context));
         } catch (e) {
             log('Failed to save configuration:', e);
@@ -433,7 +442,29 @@
                            style="width: 100%; padding: 6px; border: 1px solid #555; border-radius: 4px; background: #222; color: white; font-size: 12px;"
                            value="${CONFIG.omdbApiKey}">
                 </div>
-                <button id="tvdb-save-config" style="width: 100%; background: #2196F3; color: white; border: none; border-radius: 4px; padding: 8px; cursor: pointer; font-size: 12px;">Save API Keys</button>
+                <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #555;">
+                    <label style="display: block; margin-bottom: 5px; color: #ccc; font-size: 12px; font-weight: 600;">Translation Settings:</label>
+                    <div style="margin-bottom: 10px;">
+                        <label style="display: flex; align-items: center; color: #ccc; font-size: 11px; cursor: pointer;">
+                            <input type="checkbox" id="tvdb-enable-translation" ${CONFIG.enableTranslation ? 'checked' : ''} 
+                                   style="margin-right: 6px; cursor: pointer;">
+                            Enable automatic translation to original language
+                        </label>
+                    </div>
+                    <div style="margin-bottom: 10px;">
+                        <label style="display: block; margin-bottom: 5px; color: #ccc; font-size: 12px;">Translation Service:</label>
+                        <select id="tvdb-translation-service" 
+                                style="width: 100%; padding: 6px; border: 1px solid #555; border-radius: 4px; background: #222; color: white; font-size: 12px;">
+                            <option value="libretranslate" ${CONFIG.translationService === 'libretranslate' ? 'selected' : ''}>LibreTranslate (Free)</option>
+                            <option value="mymemory" ${CONFIG.translationService === 'mymemory' ? 'selected' : ''}>MyMemory (Free)</option>
+                            <option value="none" ${CONFIG.translationService === 'none' ? 'selected' : ''}>Disabled</option>
+                        </select>
+                    </div>
+                    <div style="padding: 8px; background: #2a2a2a; border-radius: 3px; font-size: 10px; color: #aaa; margin-top: 8px;">
+                        <strong>Note:</strong> Translates English titles/overviews to original language when TMDB data is missing original language content.
+                    </div>
+                </div>
+                <button id="tvdb-save-config" style="width: 100%; background: #2196F3; color: white; border: none; border-radius: 4px; padding: 8px; cursor: pointer; font-size: 12px; margin-top: 10px;">Save Configuration</button>
             </div>
         ` : `
             <div style="margin-bottom: 10px; padding: 8px; background: #2a2a2a; border-radius: 4px; border-left: 3px solid #4CAF50;">
@@ -538,6 +569,17 @@
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px;">
                         <button id="tvdb-apply-continue-step2" class="tvdb-workflow-btn" style="background: #2196F3; color: white; border: none; border-radius: 4px; padding: 8px 12px; cursor: pointer; font-size: 13px; font-weight: 500;">Apply ▶</button>
                         <button id="tvdb-skip-step" style="background: #666; color: white; border: none; border-radius: 4px; padding: 8px 12px; cursor: pointer; font-size: 13px; font-weight: 500;">Skip Step</button>
+                    </div>
+                    
+                    <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #444;">
+                        <div style="margin-bottom: 8px; color: #ccc; font-size: 11px; font-weight: 600;">Manual Translation:</div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                            <button id="tvdb-translate-title" class="tvdb-workflow-btn" style="background: #9C27B0; color: white; border: none; border-radius: 4px; padding: 8px 12px; cursor: pointer; font-size: 12px;">🌐 Translate Title</button>
+                            <button id="tvdb-translate-overview" class="tvdb-workflow-btn" style="background: #9C27B0; color: white; border: none; border-radius: 4px; padding: 8px 12px; cursor: pointer; font-size: 12px;">🌐 Translate Overview</button>
+                        </div>
+                        <div style="margin-top: 6px; padding: 6px; background: #2a2a2a; border-radius: 3px; font-size: 10px; color: #aaa;">
+                            Translate English title/overview to original language (${context.originalIso1 || 'auto-detect'})
+                        </div>
                     </div>
                 `;
 
@@ -800,6 +842,12 @@
             case 'step2':
                 const fetchDataStep2Btn = document.getElementById('tvdb-fetch-data-step2');
                 if (fetchDataStep2Btn) fetchDataStep2Btn.onclick = fetchDataStep2;
+                
+                const translateTitleBtn = document.getElementById('tvdb-translate-title');
+                if (translateTitleBtn) translateTitleBtn.onclick = translateTitle;
+                
+                const translateOverviewBtn = document.getElementById('tvdb-translate-overview');
+                if (translateOverviewBtn) translateOverviewBtn.onclick = translateOverview;
                 break;
             case 'step3':
                 const fetchEpisodesBtn = document.getElementById('tvdb-fetch-episodes');
@@ -820,6 +868,17 @@
     function saveConfiguration() {
         CONFIG.tmdbApiKey = document.getElementById('tvdb-tmdb-key').value;
         CONFIG.omdbApiKey = document.getElementById('tvdb-omdb-key').value;
+        
+        // Get translation settings
+        const enableTranslationCheckbox = document.getElementById('tvdb-enable-translation');
+        if (enableTranslationCheckbox) {
+            CONFIG.enableTranslation = enableTranslationCheckbox.checked;
+        }
+        
+        const translationServiceSelect = document.getElementById('tvdb-translation-service');
+        if (translationServiceSelect) {
+            CONFIG.translationService = translationServiceSelect.value;
+        }
 
         saveConfig();
         updateStatus('Configuration saved successfully!');
@@ -886,6 +945,26 @@
             context.imdbId = imdbId;
             context.originalIso1 = tmdbData.originalLanguage;
 
+            // Get translated title and overview if needed
+            if (CONFIG.enableTranslation && tmdbData.originalLanguage && tmdbData.originalLanguage !== 'en') {
+                updateStatus('Checking translations...');
+                try {
+                    const translated = await getTranslatedTitleAndOverview(tmdbData);
+                    // Update tmdbData with translated values
+                    if (translated.originalName) {
+                        tmdbData.originalName = translated.originalName;
+                        log(`Using translated title: ${translated.originalName.substring(0, 50)}...`);
+                    }
+                    if (translated.overview) {
+                        tmdbData.overview = translated.overview;
+                        log(`Using translated overview: ${translated.overview.substring(0, 50)}...`);
+                    }
+                } catch (error) {
+                    log(`Translation check failed: ${error.message}`);
+                    // Continue with original data if translation fails
+                }
+            }
+
             // Store fetched data globally
             window.tvdbFetchedData = {
                 tmdb: tmdbData,
@@ -903,6 +982,109 @@
         } catch (error) {
             updateStatus(`Error fetching data: ${error.message}`);
             log('Error fetching data:', error);
+        }
+    }
+
+    // Manual translation functions for Step 2
+    async function translateTitle() {
+        if (!window.tvdbFetchedData || !window.tvdbFetchedData.tmdb) {
+            updateStatus('No data available. Please fetch data first.');
+            return;
+        }
+        
+        const tmdbData = window.tvdbFetchedData.tmdb;
+        const originalLang = tmdbData.originalLanguage || context.originalIso1;
+        
+        if (!originalLang || originalLang === 'en') {
+            updateStatus('Original language is English. No translation needed.');
+            return;
+        }
+        
+        const currentTitle = tmdbData.originalName || tmdbData.name;
+        if (!currentTitle || !currentTitle.trim()) {
+            updateStatus('No title available to translate.');
+            return;
+        }
+        
+        if (!CONFIG.enableTranslation || CONFIG.translationService === 'none') {
+            updateStatus('⚠ Translation is disabled. Please enable it in settings (Manage Keys > Translation Settings).');
+            return;
+        }
+        
+        try {
+            updateStatus(`Translating title to ${originalLang}...`);
+            log(`Manually translating title: "${currentTitle}" to ${originalLang}`);
+            
+            const translated = await translateText(currentTitle, originalLang);
+            
+            if (translated && translated !== currentTitle && translated.trim().length > 0) {
+                // Update the data
+                tmdbData.originalName = translated;
+                window.tvdbFetchedData.tmdb = tmdbData;
+                
+                // Update preview
+                const preview = generateStep2Preview(tmdbData, window.tvdbFetchedData.omdb);
+                updatePreview(preview);
+                
+                updateStatus(`✓ Title translated successfully!`);
+                log(`✓ Translated title: "${currentTitle}" -> "${translated}"`);
+            } else {
+                updateStatus(`Translation didn't change the text. Using original.`);
+            }
+        } catch (error) {
+            updateStatus(`Translation failed: ${error.message}`);
+            log(`Translation error:`, error);
+        }
+    }
+    
+    async function translateOverview() {
+        if (!window.tvdbFetchedData || !window.tvdbFetchedData.tmdb) {
+            updateStatus('No data available. Please fetch data first.');
+            return;
+        }
+        
+        const tmdbData = window.tvdbFetchedData.tmdb;
+        const originalLang = tmdbData.originalLanguage || context.originalIso1;
+        
+        if (!originalLang || originalLang === 'en') {
+            updateStatus('Original language is English. No translation needed.');
+            return;
+        }
+        
+        const currentOverview = tmdbData.overview;
+        if (!currentOverview || !currentOverview.trim()) {
+            updateStatus('No overview available to translate.');
+            return;
+        }
+        
+        if (!CONFIG.enableTranslation || CONFIG.translationService === 'none') {
+            updateStatus('⚠ Translation is disabled. Please enable it in settings (Manage Keys > Translation Settings).');
+            return;
+        }
+        
+        try {
+            updateStatus(`Translating overview to ${originalLang}...`);
+            log(`Manually translating overview (${currentOverview.length} chars) to ${originalLang}`);
+            
+            const translated = await translateText(currentOverview, originalLang);
+            
+            if (translated && translated !== currentOverview && translated.trim().length > 0) {
+                // Update the data
+                tmdbData.overview = translated;
+                window.tvdbFetchedData.tmdb = tmdbData;
+                
+                // Update preview
+                const preview = generateStep2Preview(tmdbData, window.tvdbFetchedData.omdb);
+                updatePreview(preview);
+                
+                updateStatus(`✓ Overview translated successfully!`);
+                log(`✓ Translated overview: "${currentOverview.substring(0, 50)}..." -> "${translated.substring(0, 50)}..."`);
+            } else {
+                updateStatus(`Translation didn't change the text. Using original.`);
+            }
+        } catch (error) {
+            updateStatus(`Translation failed: ${error.message}`);
+            log(`Translation error:`, error);
         }
     }
 
@@ -1272,6 +1454,12 @@
 
     // Generate step 2 preview
     function generateStep2Preview(tmdbData, omdbData) {
+        // Check if overview appears to be translated or in original language
+        const overviewIsEnglish = tmdbData.overview && isLikelyEnglish(tmdbData.overview);
+        const overviewNote = tmdbData.originalLanguage && tmdbData.originalLanguage !== 'en' && overviewIsEnglish 
+            ? ' <span style="color: #FF9800; font-size: 10px;">(⚠ English - may need translation)</span>' 
+            : '';
+        
         return `
             <div style="background: #2a2a2a; padding: 8px; border-radius: 4px; font-size: 11px; color: #ccc; margin-bottom: 8px; border-left: 3px solid #4CAF50;">
                 <div style="color: #4CAF50; font-weight: 600; margin-bottom: 6px; font-size: 12px;">📺 Preview</div>
@@ -1279,10 +1467,15 @@
                 <div><strong>TMDB Original Title:</strong> ${tmdbData.originalName || 'N/A'}</div>
                 <div><strong>TMDB Year:</strong> ${tmdbData.year || 'N/A'}</div>
                 <div><strong>TMDB Language:</strong> ${tmdbData.originalLanguage || 'N/A'}</div>
-                <div><strong>TMDB Overview:</strong> ${tmdbData.overview ? tmdbData.overview.substring(0, 100) + '...' : 'N/A'}</div>
+                <div><strong>TMDB Overview:</strong> ${tmdbData.overview ? tmdbData.overview.substring(0, 100) + '...' : 'N/A'}${overviewNote}</div>
                 <div><strong>TMDB Genres:</strong> ${tmdbData.genres ? tmdbData.genres.map(g => g.name || g).join(', ') : 'N/A'}</div>
                 <div><strong>TMDB Status:</strong> ${tmdbData.status || 'N/A'}</div>
                 <div><strong>TMDB Country:</strong> ${tmdbData.originCountry ? tmdbData.originCountry.join(', ') : 'N/A'}</div>
+                ${!CONFIG.enableTranslation && tmdbData.originalLanguage && tmdbData.originalLanguage !== 'en' ? `
+                    <div style="margin-top: 8px; padding: 6px; background: #443300; border-radius: 3px; font-size: 10px; color: #FFA500;">
+                        ⚠ Translation is disabled. Enable it in settings to translate English content.
+                    </div>
+                ` : ''}
                 ${omdbData ? `
                     <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #444;">
                         <div style="color: #FF9800; font-weight: bold;">IMDb Data (from OMDb)</div>
@@ -1318,8 +1511,275 @@
         return html;
     }
 
+    // ============================================================
+    // Translation Functions
+    // ============================================================
+    
+    /**
+     * Detects if text is likely in English
+     * Simple heuristic based on character patterns
+     */
+    function isLikelyEnglish(text) {
+        if (!text || text.trim().length === 0) return false;
+        
+        const textLower = text.toLowerCase();
+        
+        // Check for common English words
+        const englishWords = ['the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'can', 'her', 'was', 'one', 'our', 'out', 'day', 'get', 'has', 'him', 'his', 'how', 'man', 'new', 'now', 'old', 'see', 'two', 'way', 'who', 'its', 'yes', 'this', 'that', 'from', 'with', 'have', 'been', 'will', 'they', 'when', 'there', 'their', 'would', 'about', 'which', 'these', 'other', 'time', 'could', 'after', 'first', 'never', 'where', 'should', 'being', 'those', 'right', 'think', 'going', 'until', 'might', 'while', 'years', 'every', 'during', 'before', 'something', 'nothing', 'always', 'between'];
+        
+        const words = textLower.split(/\s+/);
+        let englishWordCount = 0;
+        let totalWords = Math.min(words.length, 20); // Check first 20 words
+        
+        for (let i = 0; i < totalWords && i < words.length; i++) {
+            const word = words[i].replace(/[^\w]/g, '');
+            if (word.length > 2 && englishWords.includes(word)) {
+                englishWordCount++;
+            }
+        }
+        
+        // If more than 30% of words are common English words, likely English
+        return totalWords > 0 && (englishWordCount / totalWords) > 0.3;
+    }
+    
+    /**
+     * Translates text using LibreTranslate (free public API)
+     */
+    async function translateLibreTranslate(text, targetLang) {
+        try {
+            // LibreTranslate public endpoints (may have rate limits)
+            const endpoints = [
+                'https://libretranslate.com/translate',
+                'https://libretranslate.de/translate'
+            ];
+            
+            // Map ISO-639-1 to LibreTranslate language codes
+            const langMap = {
+                'te': 'te', 'ta': 'ta', 'ml': 'ml', 'kn': 'kn', 'hi': 'hi',
+                'bn': 'bn', 'gu': 'gu', 'pa': 'pa', 'or': 'or', 'as': 'as',
+                'ne': 'ne', 'si': 'si', 'my': 'my', 'km': 'km', 'lo': 'lo',
+                'ka': 'ka', 'hy': 'hy', 'az': 'az', 'kk': 'kk', 'ky': 'ky',
+                'uz': 'uz', 'tg': 'tg', 'mn': 'mn', 'he': 'he', 'fa': 'fa',
+                'ur': 'ur', 'ps': 'ps', 'es': 'es', 'fr': 'fr', 'de': 'de',
+                'it': 'it', 'pt': 'pt', 'ru': 'ru', 'ja': 'ja', 'ko': 'ko',
+                'zh': 'zh', 'ar': 'ar', 'th': 'th', 'vi': 'vi', 'tr': 'tr'
+            };
+            
+            const targetCode = langMap[targetLang] || targetLang;
+            
+            for (const endpoint of endpoints) {
+                try {
+                    const response = await fetch(endpoint, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            q: text,
+                            source: 'en',
+                            target: targetCode,
+                            format: 'text'
+                        })
+                    });
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (data.translatedText) {
+                            log(`Translation successful via LibreTranslate: ${text.substring(0, 50)}... -> ${data.translatedText.substring(0, 50)}...`);
+                            return data.translatedText;
+                        }
+                    }
+                } catch (e) {
+                    log(`LibreTranslate endpoint ${endpoint} failed:`, e);
+                    continue;
+                }
+            }
+            
+            throw new Error('All LibreTranslate endpoints failed');
+        } catch (error) {
+            log('LibreTranslate error:', error);
+            throw error;
+        }
+    }
+    
+    /**
+     * Translates text using MyMemory Translation API (free tier)
+     */
+    async function translateMyMemory(text, targetLang) {
+        try {
+            // MyMemory free API endpoint
+            const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=en|${targetLang}`;
+            
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error(`MyMemory API error: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            if (data.responseStatus === 200 && data.responseData && data.responseData.translatedText) {
+                const translated = data.responseData.translatedText;
+                log(`Translation successful via MyMemory: ${text.substring(0, 50)}... -> ${translated.substring(0, 50)}...`);
+                return translated;
+            } else {
+                throw new Error('MyMemory translation failed');
+            }
+        } catch (error) {
+            log('MyMemory translation error:', error);
+            throw error;
+        }
+    }
+    
+    /**
+     * Main translation function that selects the appropriate service
+     */
+    async function translateText(text, targetLang) {
+        if (!text || !targetLang || !CONFIG.enableTranslation) {
+            return text;
+        }
+        
+        if (targetLang === 'en') {
+            return text; // Already in target language
+        }
+        
+        // Skip if translation service is disabled
+        if (CONFIG.translationService === 'none') {
+            return text;
+        }
+        
+        try {
+            updateStatus(`Translating to ${targetLang}...`);
+            log(`Translating text: "${text.substring(0, 100)}..." to ${targetLang}`);
+            
+            let translated;
+            if (CONFIG.translationService === 'libretranslate') {
+                translated = await translateLibreTranslate(text, targetLang);
+            } else if (CONFIG.translationService === 'mymemory') {
+                translated = await translateMyMemory(text, targetLang);
+            } else {
+                log(`Unknown translation service: ${CONFIG.translationService}`);
+                return text;
+            }
+            
+            return translated || text;
+        } catch (error) {
+            log(`Translation failed: ${error.message}`);
+            updateStatus(`Translation failed: ${error.message}`);
+            return text; // Return original text on failure
+        }
+    }
+    
+    /**
+     * Check TMDB translations and translate if needed
+     * Returns object with originalName and overview in original language
+     */
+    async function getTranslatedTitleAndOverview(tmdbData) {
+        const originalLang = tmdbData.originalLanguage;
+        
+        // If original language is English, no translation needed
+        if (!originalLang || originalLang === 'en') {
+            return {
+                originalName: tmdbData.originalName || tmdbData.name,
+                overview: tmdbData.overview
+            };
+        }
+        
+        // First, check if TMDB has translations for the original language
+        if (tmdbData.translations && tmdbData.translations.length > 0) {
+            const originalLangTranslation = tmdbData.translations.find(t => 
+                t.iso_639_1 === originalLang && t.iso_3166_1 === originalLang.toUpperCase()
+            ) || tmdbData.translations.find(t => t.iso_639_1 === originalLang);
+            
+            if (originalLangTranslation && originalLangTranslation.data) {
+                const transData = originalLangTranslation.data;
+                const translatedName = transData.name || transData.title;
+                const translatedOverview = transData.overview;
+                
+                // Use translation if available and not empty
+                if (translatedName && translatedName.trim()) {
+                    log(`Found TMDB translation for ${originalLang}: ${translatedName.substring(0, 50)}...`);
+                    return {
+                        originalName: translatedName,
+                        overview: translatedOverview || tmdbData.overview
+                    };
+                }
+            }
+        }
+        
+        // If no TMDB translation found, check if current data is in English
+        const currentName = tmdbData.originalName || tmdbData.name;
+        const currentOverview = tmdbData.overview;
+        
+        const nameIsEnglish = isLikelyEnglish(currentName);
+        const overviewIsEnglish = currentOverview && isLikelyEnglish(currentOverview);
+        
+        // Always try to translate if:
+        // 1. Original language is not English, AND
+        // 2. (Content appears to be in English OR we have no TMDB translation)
+        const hasTmdbTranslation = tmdbData.translations && tmdbData.translations.some(t => 
+            t.iso_639_1 === originalLang && t.data?.overview && t.data.overview.trim() && !isLikelyEnglish(t.data.overview)
+        );
+        
+        const shouldTranslate = originalLang && originalLang !== 'en' && CONFIG.enableTranslation &&
+                               (nameIsEnglish || overviewIsEnglish || (!hasTmdbTranslation && currentOverview && currentOverview.length > 0));
+        
+        if (shouldTranslate) {
+            log(`Attempting to translate content to ${originalLang}...`);
+            log(`  Name is English: ${nameIsEnglish}, Overview is English: ${overviewIsEnglish}`);
+            
+            const results = {
+                originalName: currentName,
+                overview: currentOverview
+            };
+            
+            // Translate title if it appears to be English
+            if (nameIsEnglish && currentName) {
+                try {
+                    const translated = await translateText(currentName, originalLang);
+                    if (translated && translated !== currentName) {
+                        results.originalName = translated;
+                        log(`✓ Translated title: ${translated.substring(0, 50)}...`);
+                    }
+                } catch (error) {
+                    log(`Failed to translate title: ${error.message}`);
+                }
+            }
+            
+            // Always try to translate overview if it appears to be English
+            if (overviewIsEnglish && currentOverview && currentOverview.trim()) {
+                try {
+                    updateStatus(`Translating overview to ${originalLang}...`);
+                    const translated = await translateText(currentOverview, originalLang);
+                    if (translated && translated !== currentOverview && translated.trim().length > 0) {
+                        results.overview = translated;
+                        log(`✓ Translated overview: ${translated.substring(0, 100)}...`);
+                        updateStatus(`Overview translated successfully!`);
+                    } else {
+                        log(`Translation returned same or empty text, using original`);
+                        updateStatus(`Translation didn't change text. Using original overview.`);
+                    }
+                } catch (error) {
+                    log(`Failed to translate overview: ${error.message}`);
+                    // Show error in status
+                    updateStatus(`Translation failed: ${error.message}. Using original overview.`);
+                }
+            } else if (!overviewIsEnglish && currentOverview) {
+                log(`Overview doesn't appear to be in English, using as-is`);
+            }
+            
+            return results;
+        }
+        
+        // If content doesn't appear to be English and translation is disabled, use as-is
+        log(`Using content as-is (English detection: name=${nameIsEnglish}, overview=${overviewIsEnglish}, translation enabled=${CONFIG.enableTranslation})`);
+        return {
+            originalName: currentName,
+            overview: currentOverview
+        };
+    }
+
     // Fetch TMDB data
     async function fetchTmdbData(tmdbId) {
+        // First fetch with default language (usually English)
         const url = `https://api.themoviedb.org/3/tv/${tmdbId}?api_key=${CONFIG.tmdbApiKey}&append_to_response=external_ids,images,translations`;
 
         const response = await fetch(url);
@@ -1349,7 +1809,45 @@
         log(`  Original Language: ${data.original_language}`);
         log(`  Name: ${data.name}`);
         log(`  Original Name: ${data.original_name}`);
+        log(`  Overview: ${data.overview ? data.overview.substring(0, 100) + '...' : 'None'}`);
         log(`  Origin Country: ${data.origin_country?.join(', ') || 'None'}`);
+        
+        // If original language is not English, try fetching with original language parameter
+        if (data.original_language && data.original_language !== 'en' && data.original_language !== 'en-US') {
+            const langUrl = `https://api.themoviedb.org/3/tv/${tmdbId}?api_key=${CONFIG.tmdbApiKey}&language=${data.original_language}`;
+            try {
+                const langResponse = await fetch(langUrl);
+                if (langResponse.ok) {
+                    const langData = await langResponse.json();
+                    log(`🔍 TMDB API Response (${data.original_language}):`);
+                    log(`  Name: ${langData.name}`);
+                    log(`  Overview: ${langData.overview ? langData.overview.substring(0, 100) + '...' : 'None'}`);
+                    
+                    // If we got data in original language, use it
+                    if (langData.name && langData.name.trim()) {
+                        // Check if the name is actually in the original language (not English)
+                        if (!isLikelyEnglish(langData.name)) {
+                            result.originalName = langData.name;
+                            log(`✓ Using original language name from TMDB: ${langData.name}`);
+                        }
+                    }
+                    if (langData.overview && langData.overview.trim()) {
+                        // Check if the overview is actually in the original language (not English)
+                        const overviewIsEnglish = isLikelyEnglish(langData.overview);
+                        if (!overviewIsEnglish) {
+                            result.overview = langData.overview;
+                            log(`✓ Using original language overview from TMDB (not English)`);
+                        } else {
+                            log(`⚠ TMDB returned English overview even when requesting ${data.original_language}. Will attempt translation.`);
+                        }
+                    } else if (!langData.overview || !langData.overview.trim()) {
+                        log(`⚠ TMDB has no overview in ${data.original_language}, using default (likely English)`);
+                    }
+                }
+            } catch (error) {
+                log(`Failed to fetch TMDB data in ${data.original_language}:`, error);
+            }
+        }
         
         return result;
     }
