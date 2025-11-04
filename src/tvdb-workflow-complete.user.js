@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         TVDB Workflow Helper - Complete
 // @namespace    tvdb.workflow
-// @version      1.3.0
-// @description  Complete TVDB 5-step workflow helper with TMDB/OMDb integration
+// @version      1.5.0
+// @description  Complete TVDB 5-step workflow helper with TMDB/OMDb integration and flexible OMDb-only mode
 // @author       you
 // @match        https://thetvdb.com/series/create*
 // @match        https://thetvdb.com/series/create-step2*
@@ -22,9 +22,9 @@
 (function() {
     'use strict';
 
-    console.log('🎬 TVDB Workflow Helper v1.3.0 - Production Ready');
+    console.log('🎬 TVDB Workflow Helper v1.5.0 - Production Ready');
     console.log('📋 Complete 5-step TVDB submission automation');
-    console.log('🔧 TMDB + OMDb integration with fallback support');
+    console.log('🔧 TMDB + OMDb integration with flexible OMDb-only mode (Steps 1, 2 & 3)');
 
     // Configuration and state
     const CONFIG = {
@@ -514,17 +514,28 @@
             case 'step1':
                 return `
                     <div style="margin-bottom: 15px;">
+                        <label style="display: block; margin-bottom: 5px; color: #ccc;">Data Source:</label>
+                        <select id="tvdb-data-source" style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: #333; color: white; margin-bottom: 10px;">
+                            <option value="tmdb">TMDB (Recommended)</option>
+                            <option value="omdb">OMDb Only (IMDb ID)</option>
+                        </select>
+                    </div>
+
+                    <div id="tvdb-tmdb-fields" style="margin-bottom: 15px;">
                         <label style="display: block; margin-bottom: 5px; color: #ccc;">TMDB TV ID:</label>
                         <input type="text" id="tvdb-tmdb-id" placeholder="e.g., 277489"
                                style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: #333; color: white; margin-bottom: 10px;"
                                value="${context.tmdbId}">
                     </div>
 
-                    <div style="margin-bottom: 15px;">
-                        <label style="display: block; margin-bottom: 5px; color: #ccc;">Manual IMDb ID (fallback):</label>
-                        <input type="text" id="tvdb-manual-imdb" placeholder="e.g., tt1234567"
-                               style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: #333; color: white; margin-bottom: 10px;"
+                    <div id="tvdb-omdb-fields" style="margin-bottom: 15px; display: none;">
+                        <label style="display: block; margin-bottom: 5px; color: #ccc;">IMDb ID:</label>
+                        <input type="text" id="tvdb-imdb-id-only" placeholder="e.g., tt1234567"
+                               style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: #333; color: white; margin-bottom: 5px;"
                                value="${context.imdbId}">
+                        <div style="font-size: 10px; color: #999; margin-bottom: 10px;">
+                            ⚠️ OMDb-only mode: Limited data available, no episode descriptions
+                        </div>
                     </div>
 
                     <div style="display: flex; gap: 8px; margin-bottom: 15px;">
@@ -546,10 +557,28 @@
             case 'step2':
                 return `
                     <div style="margin-bottom: 15px;">
+                        <label style="display: block; margin-bottom: 5px; color: #ccc;">Data Source:</label>
+                        <select id="tvdb-data-source-step2" style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: #333; color: white; margin-bottom: 10px;">
+                            <option value="tmdb">TMDB (Recommended)</option>
+                            <option value="omdb">OMDb Only (IMDb ID)</option>
+                        </select>
+                    </div>
+
+                    <div id="tvdb-tmdb-fields-step2" style="margin-bottom: 15px;">
                         <label style="display: block; margin-bottom: 5px; color: #ccc;">TMDB TV ID:</label>
                         <input type="text" id="tvdb-tmdb-id-step2" placeholder="e.g., 277489"
                                style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: #333; color: white; margin-bottom: 10px;"
                                value="${context.tmdbId}">
+                    </div>
+
+                    <div id="tvdb-omdb-fields-step2" style="margin-bottom: 15px; display: none;">
+                        <label style="display: block; margin-bottom: 5px; color: #ccc;">IMDb ID:</label>
+                        <input type="text" id="tvdb-imdb-id-step2-only" placeholder="e.g., tt1234567"
+                               style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: #333; color: white; margin-bottom: 5px;"
+                               value="${context.imdbId}">
+                        <div style="font-size: 10px; color: #999; margin-bottom: 10px;">
+                            ⚠️ OMDb-only mode: Limited data available
+                        </div>
                     </div>
 
                     <div style="margin-bottom: 10px;">
@@ -602,10 +631,37 @@
                 }
                 return `
                     <div style="margin-bottom: 15px;">
-                        <label style="display: block; margin-bottom: 5px; color: #ccc;">TMDB TV ID:</label>
-                        <input type="text" id="tvdb-tmdb-id-step3" placeholder="e.g., 277489"
-                               style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: #333; color: white; margin-bottom: 10px;"
-                               value="${context.tmdbId}">
+                        <label style="display: block; margin-bottom: 5px; color: #ccc;">Episode Data Source:</label>
+                        <select id="tvdb-episode-source" style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: #333; color: white; margin-bottom: 10px;">
+                            <option value="tmdb">TMDB (Recommended)</option>
+                            <option value="omdb">OMDb Only (IMDb ID)</option>
+                        </select>
+                    </div>
+
+                    <div id="tvdb-tmdb-episode-fields">
+                        <div style="margin-bottom: 15px;">
+                            <label style="display: block; margin-bottom: 5px; color: #ccc;">TMDB TV ID:</label>
+                            <input type="text" id="tvdb-tmdb-id-step3" placeholder="e.g., 277489"
+                                   style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: #333; color: white; margin-bottom: 10px;"
+                                   value="${context.tmdbId}">
+                        </div>
+
+                        <div style="margin-bottom: 15px;">
+                            <label style="display: block; margin-bottom: 5px; color: #ccc;">IMDb ID (optional, for description fallback):</label>
+                            <input type="text" id="tvdb-imdb-id-step3" placeholder="e.g., tt1234567" value="${context.imdbId || ''}" style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: #333; color: #fff; font-size: 12px;">
+                        </div>
+                    </div>
+
+                    <div id="tvdb-omdb-episode-fields" style="display: none;">
+                        <div style="margin-bottom: 15px;">
+                            <label style="display: block; margin-bottom: 5px; color: #ccc;">IMDb ID:</label>
+                            <input type="text" id="tvdb-imdb-id-step3-only" placeholder="e.g., tt1234567"
+                                   style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: #333; color: white; margin-bottom: 5px;"
+                                   value="${context.imdbId}">
+                            <div style="font-size: 10px; color: #999; margin-bottom: 10px;">
+                                ⚠️ OMDb episode data: titles and air dates only, limited descriptions
+                            </div>
+                        </div>
                     </div>
 
                     <div style="margin-bottom: 15px;">
@@ -622,11 +678,6 @@
                             ${context.imdbId ? `<br>IMDb ID: ${context.imdbId}` : ''}
                             ${context.selectedSeason ? `<br>Season: ${context.selectedSeason}` : ''}
                         </div>
-                    </div>
-
-                    <div style="margin-bottom: 15px;">
-                        <label style="display: block; margin-bottom: 5px; color: #ccc;">IMDb ID (auto-filled from TMDB):</label>
-                        <input type="text" id="tvdb-imdb-id-step3" placeholder="Will be auto-filled from TMDB" value="${context.imdbId || ''}" style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: #333; color: #fff; font-size: 12px;" readonly>
                     </div>
 
                     <div style="display: flex; gap: 8px; margin-bottom: 15px;">
@@ -838,6 +889,22 @@
                 
                 const retryFillBtn = document.getElementById('tvdb-retry-fill');
                 if (retryFillBtn) retryFillBtn.onclick = retryFill;
+                
+                // Data source selector
+                const dataSourceSelect = document.getElementById('tvdb-data-source');
+                if (dataSourceSelect) {
+                    dataSourceSelect.onchange = function() {
+                        const tmdbFields = document.getElementById('tvdb-tmdb-fields');
+                        const omdbFields = document.getElementById('tvdb-omdb-fields');
+                        if (this.value === 'omdb') {
+                            if (tmdbFields) tmdbFields.style.display = 'none';
+                            if (omdbFields) omdbFields.style.display = 'block';
+                        } else {
+                            if (tmdbFields) tmdbFields.style.display = 'block';
+                            if (omdbFields) omdbFields.style.display = 'none';
+                        }
+                    };
+                }
                 break;
             case 'step2':
                 const fetchDataStep2Btn = document.getElementById('tvdb-fetch-data-step2');
@@ -848,10 +915,42 @@
                 
                 const translateOverviewBtn = document.getElementById('tvdb-translate-overview');
                 if (translateOverviewBtn) translateOverviewBtn.onclick = translateOverview;
+                
+                // Data source selector for Step 2
+                const dataSourceSelectStep2 = document.getElementById('tvdb-data-source-step2');
+                if (dataSourceSelectStep2) {
+                    dataSourceSelectStep2.onchange = function() {
+                        const tmdbFieldsStep2 = document.getElementById('tvdb-tmdb-fields-step2');
+                        const omdbFieldsStep2 = document.getElementById('tvdb-omdb-fields-step2');
+                        if (this.value === 'omdb') {
+                            if (tmdbFieldsStep2) tmdbFieldsStep2.style.display = 'none';
+                            if (omdbFieldsStep2) omdbFieldsStep2.style.display = 'block';
+                        } else {
+                            if (tmdbFieldsStep2) tmdbFieldsStep2.style.display = 'block';
+                            if (omdbFieldsStep2) omdbFieldsStep2.style.display = 'none';
+                        }
+                    };
+                }
                 break;
             case 'step3':
                 const fetchEpisodesBtn = document.getElementById('tvdb-fetch-episodes');
                 if (fetchEpisodesBtn) fetchEpisodesBtn.onclick = fetchEpisodes;
+                
+                // Episode source selector
+                const episodeSourceSelect = document.getElementById('tvdb-episode-source');
+                if (episodeSourceSelect) {
+                    episodeSourceSelect.onchange = function() {
+                        const tmdbEpisodeFields = document.getElementById('tvdb-tmdb-episode-fields');
+                        const omdbEpisodeFields = document.getElementById('tvdb-omdb-episode-fields');
+                        if (this.value === 'omdb') {
+                            if (tmdbEpisodeFields) tmdbEpisodeFields.style.display = 'none';
+                            if (omdbEpisodeFields) omdbEpisodeFields.style.display = 'block';
+                        } else {
+                            if (tmdbEpisodeFields) tmdbEpisodeFields.style.display = 'block';
+                            if (omdbEpisodeFields) omdbEpisodeFields.style.display = 'none';
+                        }
+                    };
+                }
                 break;
             case 'step4':
                 const fetchPostersBtn = document.getElementById('tvdb-fetch-posters');
@@ -904,6 +1003,20 @@
 
     // Fetch data for step 2
     async function fetchDataStep2() {
+        const dataSource = document.getElementById('tvdb-data-source-step2')?.value || 'tmdb';
+        
+        // Check which mode we're in
+        if (dataSource === 'omdb') {
+            // OMDb-only mode
+            await fetchDataStep2OmdbOnly();
+        } else {
+            // TMDB mode (original behavior)
+            await fetchDataStep2Tmdb();
+        }
+    }
+
+    // Fetch data for step 2 using TMDB (original behavior)
+    async function fetchDataStep2Tmdb() {
         const tmdbId = document.getElementById('tvdb-tmdb-id-step2').value.trim();
 
         if (!tmdbId) {
@@ -982,6 +1095,74 @@
         } catch (error) {
             updateStatus(`Error fetching data: ${error.message}`);
             log('Error fetching data:', error);
+        }
+    }
+
+    // Fetch data for step 2 using OMDb only (no TMDB)
+    async function fetchDataStep2OmdbOnly() {
+        const imdbId = document.getElementById('tvdb-imdb-id-step2-only').value.trim();
+
+        if (!imdbId) {
+            updateStatus('Please enter an IMDb ID');
+            return;
+        }
+
+        if (!CONFIG.omdbApiKey) {
+            updateStatus('Please configure OMDb API key first');
+            return;
+        }
+
+        // Validate IMDb ID format
+        if (!imdbId.match(/^tt\d+$/)) {
+            updateStatus('Invalid IMDb ID format. Should be like: tt1234567');
+            return;
+        }
+
+        updateStatus('Fetching data from OMDb...');
+        log('Starting OMDb-only fetch for IMDb ID:', imdbId);
+
+        try {
+            // Fetch full OMDb data
+            const omdbFullData = await fetchOmdbDataFull(imdbId);
+            log('OMDb full data received:', omdbFullData);
+
+            // Convert to TMDB-compatible format
+            const tmdbData = convertOmdbToTmdbFormat(omdbFullData);
+            log('Converted to TMDB format:', tmdbData);
+
+            // Create simplified OMDb data for compatibility
+            const omdbData = {
+                title: omdbFullData.Title,
+                year: omdbFullData.Year,
+                language: omdbFullData.Language,
+                imdbId: omdbFullData.imdbID
+            };
+
+            // Update context
+            context.tmdbId = ''; // No TMDB ID in OMDb-only mode
+            context.imdbId = imdbId;
+            context.originalIso1 = tmdbData.originalLanguage;
+
+            // Store fetched data
+            window.tvdbFetchedData = {
+                tmdb: tmdbData,
+                omdb: omdbData,
+                imdbId: imdbId,
+                isOmdbOnly: true
+            };
+
+            // Generate preview
+            const preview = generateStep2Preview(tmdbData, omdbData);
+            updatePreview(preview);
+
+            // Update status
+            updateStatus(`OMDb data fetched successfully! IMDb ID: ${imdbId}`);
+
+            log('OMDb-only fetch completed', window.tvdbFetchedData);
+
+        } catch (error) {
+            updateStatus(`Error fetching OMDb data: ${error.message}`);
+            log('Error fetching OMDb data:', error);
         }
     }
 
@@ -1115,6 +1296,20 @@
 
     // Fetch episodes for step 3
     async function fetchEpisodes() {
+        const episodeSource = document.getElementById('tvdb-episode-source')?.value || 'tmdb';
+        
+        // Check which mode we're in
+        if (episodeSource === 'omdb') {
+            // OMDb-only mode
+            await fetchEpisodesOmdbOnly();
+        } else {
+            // TMDB mode (original behavior)
+            await fetchEpisodesTmdb();
+        }
+    }
+
+    // Fetch episodes using TMDB (original behavior)
+    async function fetchEpisodesTmdb() {
         const seasonNum = document.getElementById('tvdb-season-num').value.trim();
         const tmdbId = document.getElementById('tvdb-tmdb-id-step3').value.trim();
         const imdbId = document.getElementById('tvdb-imdb-id-step3').value.trim();
@@ -1159,6 +1354,114 @@
         } catch (error) {
             updateStatus(`Error fetching episodes: ${error.message}`);
             log('Error fetching episodes:', error);
+        }
+    }
+
+    // Fetch episodes using OMDb only (no TMDB)
+    async function fetchEpisodesOmdbOnly() {
+        const seasonNum = document.getElementById('tvdb-season-num').value.trim();
+        const imdbId = document.getElementById('tvdb-imdb-id-step3-only').value.trim();
+
+        if (!seasonNum) {
+            updateStatus('Please enter a season number');
+            return;
+        }
+
+        if (!imdbId) {
+            updateStatus('Please enter an IMDb ID');
+            return;
+        }
+
+        if (!CONFIG.omdbApiKey) {
+            updateStatus('Please configure OMDb API key first');
+            return;
+        }
+
+        // Validate IMDb ID format
+        if (!imdbId.match(/^tt\d+$/)) {
+            updateStatus('Invalid IMDb ID format. Should be like: tt1234567');
+            return;
+        }
+
+        updateStatus(`Fetching episodes from OMDb for Season ${seasonNum}...`);
+        log(`Starting OMDb-only episode fetch for IMDb ID: ${imdbId}, Season: ${seasonNum}`);
+
+        try {
+            // Fetch episodes from OMDb
+            const omdbEpisodes = await fetchOmdbSeason(imdbId, seasonNum);
+            
+            if (!omdbEpisodes || omdbEpisodes.length === 0) {
+                throw new Error('No episodes found in OMDb for this season');
+            }
+
+            // Convert OMDb episodes to TMDB-compatible format
+            const episodes = omdbEpisodes.map((ep, index) => {
+                // Parse episode number
+                let episodeNumber = index + 1;
+                if (ep.Episode) {
+                    const epNum = parseInt(ep.Episode);
+                    if (!isNaN(epNum)) {
+                        episodeNumber = epNum;
+                    }
+                }
+
+                // Parse air date
+                let airDate = '';
+                if (ep.Released && ep.Released !== 'N/A') {
+                    airDate = ep.Released;
+                }
+
+                // Get title
+                let name = ep.Title || `Episode ${episodeNumber}`;
+
+                // Get plot/overview
+                let overview = '';
+                if (ep.Plot && ep.Plot !== 'N/A') {
+                    overview = ep.Plot;
+                }
+
+                // Parse runtime
+                let runtime = null;
+                if (ep.Runtime && ep.Runtime !== 'N/A') {
+                    const runtimeMatch = ep.Runtime.match(/(\d+)/);
+                    if (runtimeMatch) {
+                        runtime = parseInt(runtimeMatch[1]);
+                    }
+                }
+
+                return {
+                    episodeNumber: episodeNumber,
+                    name: name,
+                    overview: overview,
+                    airDate: airDate,
+                    runtime: runtime,
+                    imdbRating: ep.imdbRating && ep.imdbRating !== 'N/A' ? ep.imdbRating : null,
+                    imdbId: ep.imdbID || null,
+                    isOmdbOnly: true
+                };
+            });
+
+            log(`Converted ${episodes.length} OMDb episodes to standard format`);
+
+            // Store episode data globally
+            window.tvdbEpisodeData = {
+                season: parseInt(seasonNum),
+                episodes: episodes,
+                tmdbId: '', // No TMDB ID in OMDb-only mode
+                imdbId: imdbId,
+                isOmdbOnly: true
+            };
+
+            // Generate preview
+            const preview = generateStep3Preview(episodes);
+            updatePreview(preview);
+
+            updateStatus(`Fetched ${episodes.length} episodes from OMDb for Season ${seasonNum}! Click Fill to populate the form.`);
+            log(`OMDb episode fetch completed successfully. Found ${episodes.length} episodes`);
+
+        } catch (error) {
+            updateStatus(`Error fetching OMDb episodes: ${error.message}`);
+            log('Error fetching OMDb episodes:', error);
         }
     }
 
@@ -1359,12 +1662,28 @@
             return '<div style="color: #ff6b6b;">No episodes found for this season</div>';
         }
 
-        let html = `<div style="background: #222; padding: 10px; border-radius: 4px; font-size: 12px; color: #ccc; margin-bottom: 10px;">
+        // Check if this is OMDb-only data
+        const isOmdbOnly = episodes.length > 0 && episodes[0].isOmdbOnly;
+        
+        let html = '';
+        
+        // Show OMDb-only warning if applicable
+        if (isOmdbOnly) {
+            html += `<div style="background: #2a3a4a; padding: 8px; border-radius: 4px; margin-bottom: 10px; border-left: 3px solid #FF9800;">
+                <div style="color: #FF9800; font-weight: bold; margin-bottom: 5px;">📦 OMDb-Only Episode Data</div>
+                <div style="font-size: 11px; color: #ccc;">Episode data from IMDb. Descriptions may be limited.</div>
+            </div>`;
+        }
+        
+        html += `<div style="background: #222; padding: 10px; border-radius: 4px; font-size: 12px; color: #ccc; margin-bottom: 10px;">
             <div style="color: #4CAF50; font-weight: bold; margin-bottom: 8px;">📺 Episodes Preview (${episodes.length} episodes)</div>`;
 
         episodes.slice(0, 5).forEach((episode, index) => {
+            const dataSource = episode.descriptionSource || (isOmdbOnly ? 'OMDb' : 'TMDB');
+            const sourceColor = dataSource === 'OMDb' ? '#FF9800' : '#4CAF50';
+            
             html += `<div style="margin-bottom: 8px; padding: 5px; background: #333; border-radius: 3px;">
-                <div><strong>Episode ${episode.episodeNumber}:</strong> ${episode.name || 'No title'}</div>
+                <div><strong>Episode ${episode.episodeNumber}:</strong> ${episode.name || 'No title'} <span style="color: ${sourceColor}; font-size: 10px;">[${dataSource}]</span></div>
                 <div><strong>Air Date:</strong> ${episode.airDate || 'TBA'}</div>
                 <div><strong>Runtime:</strong> ${episode.runtime || 0} minutes</div>
                 <div><strong>Overview:</strong> ${episode.overview ? episode.overview.substring(0, 100) + '...' : 'No overview'}</div>
@@ -1381,8 +1700,21 @@
 
     // Fetch data for step 1
     async function fetchData() {
+        const dataSource = document.getElementById('tvdb-data-source')?.value || 'tmdb';
+        
+        // Check which mode we're in
+        if (dataSource === 'omdb') {
+            // OMDb-only mode
+            await fetchDataOmdbOnly();
+        } else {
+            // TMDB mode (original behavior)
+            await fetchDataTmdb();
+        }
+    }
+
+    // Fetch data using TMDB (original behavior)
+    async function fetchDataTmdb() {
         const tmdbId = document.getElementById('tvdb-tmdb-id').value.trim();
-        const manualImdb = document.getElementById('tvdb-manual-imdb').value.trim();
 
         if (!tmdbId) {
             updateStatus('Please enter a TMDB TV ID');
@@ -1402,7 +1734,7 @@
             const tmdbData = await fetchTmdbData(tmdbId);
 
             let omdbData = null;
-            let imdbId = tmdbData.imdbId || manualImdb;
+            let imdbId = tmdbData.imdbId;
 
             // Always try OMDb to get IMDb title and language, even if we have IMDb ID from TMDB
             if (CONFIG.omdbApiKey && imdbId) {
@@ -1452,6 +1784,77 @@
         }
     }
 
+    // Fetch data using OMDb only (no TMDB)
+    async function fetchDataOmdbOnly() {
+        const imdbId = document.getElementById('tvdb-imdb-id-only').value.trim();
+
+        if (!imdbId) {
+            updateStatus('Please enter an IMDb ID');
+            return;
+        }
+
+        if (!CONFIG.omdbApiKey) {
+            updateStatus('Please configure OMDb API key first');
+            return;
+        }
+
+        // Validate IMDb ID format
+        if (!imdbId.match(/^tt\d+$/)) {
+            updateStatus('Invalid IMDb ID format. Should be like: tt1234567');
+            return;
+        }
+
+        updateStatus('Fetching data from OMDb...');
+        log('Starting OMDb-only fetch for IMDb ID:', imdbId);
+
+        try {
+            // Fetch full OMDb data
+            const omdbFullData = await fetchOmdbDataFull(imdbId);
+            log('OMDb full data received:', omdbFullData);
+
+            // Convert to TMDB-compatible format
+            const tmdbData = convertOmdbToTmdbFormat(omdbFullData);
+            log('Converted to TMDB format:', tmdbData);
+
+            // Create simplified OMDb data for compatibility
+            const omdbData = {
+                title: omdbFullData.Title,
+                year: omdbFullData.Year,
+                language: omdbFullData.Language,
+                imdbId: omdbFullData.imdbID
+            };
+
+            // Update context
+            context.tmdbId = ''; // No TMDB ID in OMDb-only mode
+            context.imdbId = imdbId;
+            context.originalIso1 = tmdbData.originalLanguage;
+            context.step = 'step1';
+
+            // Store fetched data
+            window.tvdbFetchedData = {
+                tmdb: tmdbData,
+                omdb: omdbData,
+                imdbId: imdbId,
+                tmdbId: '', // No TMDB ID
+                officialSite: '',
+                isOmdbOnly: true
+            };
+
+            // Update preview
+            updatePreview(generateStep1Preview(tmdbData, omdbData, imdbId));
+
+            // Update status
+            updateStatus(`OMDb data fetched successfully! IMDb ID: ${imdbId}`);
+
+            saveConfig();
+            log('OMDb-only fetch completed', window.tvdbFetchedData);
+
+        } catch (error) {
+            updateStatus(`Error fetching OMDb data: ${error.message}`);
+            log('Error fetching OMDb data:', error);
+        }
+    }
+
     // Generate step 2 preview
     function generateStep2Preview(tmdbData, omdbData) {
         // Check if overview appears to be translated or in original language
@@ -1492,19 +1895,41 @@
     function generateStep1Preview(tmdbData, omdbData, imdbId) {
         let html = '<h4 style="margin: 0 0 10px 0; color: #4CAF50;">Fetched Data Preview:</h4>';
 
-        if (tmdbData) {
-            const originalLangName = LANGUAGE_NAMES[tmdbData.originalLanguage] || tmdbData.originalLanguage;
-            html += `<div><strong>TMDB Original:</strong> ${tmdbData.originalName} (${tmdbData.year})</div>`;
-            html += `<div><strong>TMDB English:</strong> ${tmdbData.name} (${tmdbData.year})</div>`;
-            html += `<div><strong>Original Language:</strong> ${originalLangName} (${tmdbData.originalLanguage})</div>`;
-            html += `<div><strong>IMDb ID:</strong> ${imdbId || 'Not found'}</div>`;
-            html += `<div><strong>Official Site:</strong> ${tmdbData.homepage || 'Not found'}</div>`;
+        // Check if this is OMDb-only mode
+        if (tmdbData && tmdbData.isOmdbOnly) {
+            html += `<div style="background: #2a3a4a; padding: 8px; border-radius: 4px; margin-bottom: 10px; border-left: 3px solid #FF9800;">
+                <div style="color: #FF9800; font-weight: bold; margin-bottom: 5px;">📦 OMDb-Only Mode</div>
+                <div style="font-size: 11px; color: #ccc;">Limited data available. Episode descriptions may not be available.</div>
+            </div>`;
         }
 
-        if (omdbData) {
+        if (tmdbData) {
+            const originalLangName = LANGUAGE_NAMES[tmdbData.originalLanguage] || tmdbData.originalLanguage;
+            const dataSource = tmdbData.isOmdbOnly ? 'OMDb' : 'TMDB';
+            html += `<div><strong>${dataSource} Title:</strong> ${tmdbData.name} (${tmdbData.year})</div>`;
+            if (!tmdbData.isOmdbOnly) {
+                html += `<div><strong>TMDB Original:</strong> ${tmdbData.originalName} (${tmdbData.year})</div>`;
+            }
+            html += `<div><strong>Original Language:</strong> ${originalLangName} (${tmdbData.originalLanguage})</div>`;
+            html += `<div><strong>IMDb ID:</strong> ${imdbId || 'Not found'}</div>`;
+            if (tmdbData.homepage) {
+                html += `<div><strong>Official Site:</strong> ${tmdbData.homepage}</div>`;
+            }
+            if (tmdbData.overview) {
+                html += `<div><strong>Overview:</strong> ${tmdbData.overview.substring(0, 150)}...</div>`;
+            }
+            if (tmdbData.genres && tmdbData.genres.length > 0) {
+                const genreNames = tmdbData.genres.map(g => g.name || g).join(', ');
+                html += `<div><strong>Genres:</strong> ${genreNames}</div>`;
+            }
+        }
+
+        if (omdbData && !tmdbData.isOmdbOnly) {
+            html += `<div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #444;">`;
             html += `<div><strong>IMDb Title:</strong> ${omdbData.title} (${omdbData.year})</div>`;
             html += `<div><strong>IMDb Language:</strong> ${omdbData.language}</div>`;
-        } else {
+            html += `</div>`;
+        } else if (!omdbData && !tmdbData.isOmdbOnly) {
             html += `<div><strong>IMDb Data:</strong> Not available from OMDb</div>`;
         }
 
@@ -1896,6 +2321,90 @@
             year: data.Year,
             language: data.Language,
             imdbId: data.imdbID || null
+        };
+    }
+
+    // Fetch full OMDb data by IMDb ID (for OMDb-only mode)
+    async function fetchOmdbDataFull(imdbId) {
+        const url = `https://www.omdbapi.com/?apikey=${CONFIG.omdbApiKey}&i=${imdbId}&type=series`;
+
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`OMDb API error: ${response.status} ${response.statusText}`);
+        }
+
+        const data = await response.json();
+
+        if (data.Response === 'False') {
+            throw new Error(`OMDb error: ${data.Error || 'Show not found'}`);
+        }
+
+        return data;
+    }
+
+    // Convert OMDb data to TMDB-compatible format
+    function convertOmdbToTmdbFormat(omdbData) {
+        // Parse year from Year field (e.g., "2010-2020" or "2010-")
+        let year = '';
+        if (omdbData.Year) {
+            const yearMatch = omdbData.Year.match(/^(\d{4})/);
+            if (yearMatch) {
+                year = yearMatch[1];
+            }
+        }
+
+        // Parse genres
+        let genres = [];
+        if (omdbData.Genre && omdbData.Genre !== 'N/A') {
+            genres = omdbData.Genre.split(',').map(g => g.trim());
+        }
+
+        // Parse country
+        let originCountry = [];
+        if (omdbData.Country && omdbData.Country !== 'N/A') {
+            originCountry = omdbData.Country.split(',').map(c => c.trim());
+        }
+
+        // Parse language (use first one as original language)
+        let originalLanguage = 'en';
+        if (omdbData.Language && omdbData.Language !== 'N/A') {
+            const firstLang = omdbData.Language.split(',')[0].trim().toLowerCase();
+            // Convert to ISO 639-1 codes (simple mapping)
+            const langMap = {
+                'english': 'en',
+                'spanish': 'es',
+                'french': 'fr',
+                'german': 'de',
+                'italian': 'it',
+                'portuguese': 'pt',
+                'russian': 'ru',
+                'japanese': 'ja',
+                'korean': 'ko',
+                'chinese': 'zh'
+            };
+            originalLanguage = langMap[firstLang] || 'en';
+        }
+
+        // Map status
+        let status = 'Ended';
+        if (omdbData.Year && omdbData.Year.endsWith('–')) {
+            status = 'Returning Series';
+        }
+
+        return {
+            name: omdbData.Title || '',
+            originalName: omdbData.Title || '',
+            overview: omdbData.Plot && omdbData.Plot !== 'N/A' ? omdbData.Plot : '',
+            year: year,
+            originalLanguage: originalLanguage,
+            genres: genres,
+            status: status,
+            originCountry: originCountry,
+            imdbId: omdbData.imdbID || null,
+            homepage: '',
+            runtime: omdbData.Runtime && omdbData.Runtime !== 'N/A' ? parseInt(omdbData.Runtime) : null,
+            rating: omdbData.imdbRating && omdbData.imdbRating !== 'N/A' ? omdbData.imdbRating : null,
+            isOmdbOnly: true // Flag to indicate this is OMDb-only data
         };
     }
 
