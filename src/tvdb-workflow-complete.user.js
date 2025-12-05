@@ -5126,61 +5126,30 @@ Or simple text format:
         
         const count = Math.min(25, Math.min(rows.length, eps.length));
 
-        // Strategy: Fill episodes one at a time, ensuring each row is only filled once
-        // Track which rows have been used to prevent overwriting
-        const usedRows = new Set();
-        
-        log(`📊 Filling ${count} episodes into ${rows.length} rows...`);
+        // Simple strategy: Fill episodes sequentially into rows in order
+        // Row 0 -> Episode 1, Row 1 -> Episode 2, etc.
+        // Don't try to match by episode number - just fill in order
+        log(`📊 Filling ${count} episodes sequentially into ${rows.length} rows...`);
+        log(`📊 Episode order:`, eps.map(e => `Ep ${e.episode_number}: "${e.name}"`).join(', '));
         
         for (let i = 0; i < count; i++) {
             const ep = eps[i];
+            const row = rows[i];
+            
             if (!ep) {
                 log(`⚠️ No episode at index ${i}`);
                 continue;
             }
             
-            // Find an unused row for this episode
-            let targetRow = null;
-            let targetRowIndex = -1;
-            
-            // First, try to find a row that already has this episode number (if it was pre-filled)
-            for (let r = 0; r < rows.length; r++) {
-                if (usedRows.has(r)) continue; // Skip already used rows
-                
-                const row = rows[r];
-                const numEl = inputByLabelWithin(row, 'Episode #');
-                if (numEl && numEl.value && parseInt(numEl.value) === ep.episode_number) {
-                    targetRow = row;
-                    targetRowIndex = r;
-                    log(`📊 Found row ${r} with matching episode # ${ep.episode_number}`);
-                    break;
-                }
-            }
-            
-            // If no matching row found, use the first unused row
-            if (!targetRow) {
-                for (let r = 0; r < rows.length; r++) {
-                    if (!usedRows.has(r)) {
-                        targetRow = rows[r];
-                        targetRowIndex = r;
-                        log(`📊 Using unused row ${r} for Episode ${ep.episode_number}`);
-                        break;
-                    }
-                }
-            }
-            
-            if (!targetRow) {
-                log(`⚠️ No available row for Episode ${ep.episode_number}`);
+            if (!row) {
+                log(`⚠️ No row at index ${i}`);
                 continue;
             }
             
-            // Mark this row as used
-            usedRows.add(targetRowIndex);
-            
-            log(`📊 Filling Episode ${ep.episode_number} "${ep.name}" into row ${targetRowIndex} (row ${usedRows.size}/${count})`);
+            log(`📊 [${i+1}/${count}] Filling row ${i} with Episode ${ep.episode_number}: "${ep.name}"`);
             
             // Fill the entire row at once
-            fillRow(targetRow, {
+            fillRow(row, {
                 num: ep.episode_number,
                 name: ep.name,
                 overview: ep.overview,
@@ -5188,11 +5157,11 @@ Or simple text format:
                 runtime: ep.runtime || seasonAvg
             });
             
-            // Wait between fills to ensure form updates properly
-            await sleep(100);
+            // Wait between fills to ensure form updates properly and prevent race conditions
+            await sleep(150);
         }
         
-        log(`✅ Completed filling ${usedRows.size} episodes`);
+        log(`✅ Completed filling ${count} episodes`);
         log(`Episodes filled (TMDB). Review, tweak, submit.`);
     }
 
