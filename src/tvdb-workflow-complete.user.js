@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TVDB Workflow Helper - Complete
 // @namespace    tvdb.workflow
-// @version      1.8.3
+// @version      1.8.4
 // @description  Complete TVDB 5-step workflow helper with TMDB/OMDb/Hoichoi integration and flexible data source modes
 // @author       you
 // @match        https://thetvdb.com/series/create*
@@ -5184,7 +5184,8 @@ Or simple text format:
         log(`✅ Successfully filled ${filledCount} of ${count} episodes. Review, tweak, submit.`);
     }
 
-    // Fixed: Create exactly the number of rows needed
+    // Reverted to original working logic + safety check
+    // Uses gatherRows() for consistent counting (matches what fillBulkTMDB uses)
     async function ensureRows(n) {
         const addBtn = Array.from(document.querySelectorAll('button')).find(b => 
             /add another/i.test(b.textContent || '')
@@ -5196,39 +5197,33 @@ Or simple text format:
         }
         
         const need = Math.min(25, n);
-        let have = document.querySelectorAll('textarea').length;
         
-        // Calculate how many rows we need to add
-        const toAdd = need - have;
+        // Use gatherRows() for consistent counting (same method used in fillBulkTMDB)
+        let have = gatherRows().length;
         
-        if (toAdd <= 0) {
-            log(`✓ Already have ${have} rows, need ${need}. No rows to add.`);
-            return;
-        }
+        log(`📊 ensureRows: Starting with ${have} rows, need ${need} total`);
         
-        log(`📊 Creating ${toAdd} additional rows (have ${have}, need ${need})...`);
-        
-        // Click the button exactly 'toAdd' times
-        for (let i = 0; i < toAdd; i++) {
+        // Original working loop: for (let i = have; i < need; i++)
+        // This creates (need - have) rows
+        for (let i = have; i < need && addBtn; i++) {
             addBtn.click();
-            await sleep(60); // Slightly longer delay to ensure row is created
-            
-            // Verify the row was actually created
-            const newCount = document.querySelectorAll('textarea').length;
-            if (newCount > have) {
-                have = newCount;
-                log(`✓ Row ${i + 1}/${toAdd} created (total: ${have})`);
-            } else {
-                log(`⚠️ Row creation may have failed (count: ${have})`);
-            }
+            await sleep(50); // Slight delay for DOM to update
         }
         
-        // Final verification
-        const finalCount = document.querySelectorAll('textarea').length;
-        log(`📊 Row creation complete. Final count: ${finalCount} (needed: ${need})`);
+        // Wait for all rows to be created
+        await sleep(200);
         
-        if (finalCount < need) {
-            log(`⚠️ Warning: Only ${finalCount} rows available, but need ${need}`);
+        // Verify using gatherRows() (same method as fillBulkTMDB)
+        const finalCount = gatherRows().length;
+        log(`📊 ensureRows: Final count ${finalCount} rows (needed: ${need})`);
+        
+        // Safety check: if we're still short, create one more
+        if (finalCount < need && addBtn) {
+            log(`⚠️ Safety check: Creating 1 additional row (have ${finalCount}, need ${need})`);
+            addBtn.click();
+            await sleep(200);
+            const newFinalCount = gatherRows().length;
+            log(`📊 Safety check: New count ${newFinalCount} rows`);
         }
     }
 
