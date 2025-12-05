@@ -1908,7 +1908,9 @@
                 /https?:\/\/[^"'\s]+(?:episode|episodes|content|api)[^"'\s]*/gi,
                 /https?:\/\/[^"'\s]+chill[^"'\s]*/gi,
                 /https?:\/\/[^"'\s]+trai[^"'\s]*/gi,
-                /\/api\/[^"'\s]+(?:episode|content|show)[^"'\s]*/gi
+                /\/api\/[^"'\s]+(?:episode|content|show)[^"'\s]*/gi,
+                // Look for patterns like the network requests we saw: timestamp_show_slug
+                /\d+_[a-z_]+\.(?:json|js)/gi
             ];
             
             const foundApiUrls = new Set();
@@ -1917,8 +1919,12 @@
                 if (matches) {
                     matches.forEach(url => {
                         // Clean up URL (remove trailing quotes, etc.)
-                        const cleanUrl = url.replace(/["'`;,\)]+$/, '').trim();
-                        if (cleanUrl.includes('hoichoi') || cleanUrl.includes('episode') || cleanUrl.includes('content')) {
+                        let cleanUrl = url.replace(/["'`;,\)]+$/, '').trim();
+                        // Make absolute URL if relative
+                        if (cleanUrl.startsWith('/')) {
+                            cleanUrl = 'https://www.hoichoi.tv' + cleanUrl;
+                        }
+                        if (cleanUrl.includes('hoichoi') || cleanUrl.includes('episode') || cleanUrl.includes('content') || cleanUrl.match(/\d+_[a-z_]+/)) {
                             foundApiUrls.add(cleanUrl);
                         }
                     });
@@ -1927,7 +1933,90 @@
             
             log(`🔍 Found ${foundApiUrls.size} potential API URLs in HTML`);
             if (foundApiUrls.size > 0) {
-                log(`🔍 API URLs:`, Array.from(foundApiUrls));
+                log(`🔍 API URLs found:`, Array.from(foundApiUrls));
+                
+                // Try fetching from found URLs
+                for (const apiUrl of foundApiUrls) {
+                    try {
+                        log(`🔍 Trying to fetch from: ${apiUrl}`);
+                        let apiResponse;
+                        if (gmRequest) {
+                            apiResponse = await new Promise((resolve, reject) => {
+                                gmRequest({
+                                    method: 'GET',
+                                    url: apiUrl,
+                                    headers: {
+                                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                                        'Accept': 'application/json, */*'
+                                    },
+                                    onload: function(response) {
+                                        if (response.status >= 200 && response.status < 300) {
+                                            try {
+                                                const text = response.responseText;
+                                                // Try JSON first
+                                                try {
+                                                    resolve(JSON.parse(text));
+                                                } catch (e) {
+                                                    // Might be JavaScript, try to extract JSON
+                                                    const jsonMatch = text.match(/\{[\s\S]*\}/);
+                                                    if (jsonMatch) {
+                                                        try {
+                                                            resolve(JSON.parse(jsonMatch[0]));
+                                                        } catch (e2) {
+                                                            resolve(null);
+                                                        }
+                                                    } else {
+                                                        resolve(null);
+                                                    }
+                                                }
+                                            } catch (e) {
+                                                resolve(null);
+                                            }
+                                        } else {
+                                            resolve(null);
+                                        }
+                                    },
+                                    onerror: () => resolve(null),
+                                    timeout: 10000
+                                });
+                            });
+                        } else {
+                            try {
+                                const response = await fetch(apiUrl, {
+                                    headers: { 'Accept': 'application/json, */*' }
+                                });
+                                if (response.ok) {
+                                    apiResponse = await response.json();
+                                }
+                            } catch (e) {
+                                // Continue to next URL
+                            }
+                        }
+                        
+                        if (apiResponse && (Array.isArray(apiResponse) || apiResponse.episodes || apiResponse.data || apiResponse.default)) {
+                            log(`✅ Found episode data from detected API: ${apiUrl}`);
+                            const episodeArray = Array.isArray(apiResponse) ? apiResponse : 
+                                               (apiResponse.episodes || apiResponse.data || apiResponse.default || []);
+                            
+                            if (Array.isArray(episodeArray) && episodeArray.length > 0) {
+                                const parsedEpisodes = episodeArray.map((ep, idx) => ({
+                                    episodeNumber: ep.episodeNumber || ep.episode_number || ep.number || ep.index || ep.episodeIndex || (idx + 1),
+                                    name: ep.name || ep.title || ep.Title || ep.episodeName || ep.episode_name || `Episode ${ep.episodeNumber || ep.episode_number || ep.number || (idx + 1)}`,
+                                    overview: ep.overview || ep.description || ep.plot || ep.synopsis || ep.summary || '',
+                                    airDate: ep.airDate || ep.air_date || ep.released || ep.publishedAt || ep.createdAt || '',
+                                    runtime: ep.runtime || ep.duration || ep.length || (ep.durationMinutes ? parseInt(ep.durationMinutes) : 0) || 0,
+                                    isHoichoiOnly: true,
+                                    descriptionSource: 'Hoichoi'
+                                }));
+                                
+                                log(`✅ Successfully parsed ${parsedEpisodes.length} episodes from detected API`);
+                                return parsedEpisodes;
+                            }
+                        }
+                    } catch (e) {
+                        log(`⚠️ Failed to fetch from ${apiUrl}:`, e.message);
+                    }
+                }
             }
             
             // Try to construct API endpoint from show URL
