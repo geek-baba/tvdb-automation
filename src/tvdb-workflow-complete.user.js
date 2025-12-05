@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TVDB Workflow Helper - Complete
 // @namespace    tvdb.workflow
-// @version      1.7.2
+// @version      1.7.3
 // @description  Complete TVDB 5-step workflow helper with TMDB/OMDb/Hoichoi integration and flexible data source modes
 // @author       you
 // @match        https://thetvdb.com/series/create*
@@ -29,7 +29,7 @@
     'use strict';
 
     // Immediate console logs to verify script is running
-    console.log('🎬 TVDB Workflow Helper v1.7.2 - Script file loaded');
+    console.log('🎬 TVDB Workflow Helper v1.7.3 - Script file loaded');
     console.log('📍 Current URL:', window.location.href);
     console.log('📍 Current pathname:', window.location.pathname);
     console.log('📋 Complete 5-step TVDB submission automation');
@@ -1901,9 +1901,117 @@
 
             // Log HTML sample for debugging
             log(`📄 HTML fetched: ${html.length} characters`);
-            log(`📄 HTML sample (first 2000 chars): ${html.substring(0, 2000)}`);
             
-            // Parse episodes from HTML
+            // Strategy: Try to find and fetch API endpoints for episodes
+            // Look for API URLs in the HTML that might contain episode data
+            const apiUrlPatterns = [
+                /https?:\/\/[^"'\s]+(?:episode|episodes|content|api)[^"'\s]*/gi,
+                /https?:\/\/[^"'\s]+chill[^"'\s]*/gi,
+                /https?:\/\/[^"'\s]+trai[^"'\s]*/gi,
+                /\/api\/[^"'\s]+(?:episode|content|show)[^"'\s]*/gi
+            ];
+            
+            const foundApiUrls = new Set();
+            for (const pattern of apiUrlPatterns) {
+                const matches = html.match(pattern);
+                if (matches) {
+                    matches.forEach(url => {
+                        // Clean up URL (remove trailing quotes, etc.)
+                        const cleanUrl = url.replace(/["'`;,\)]+$/, '').trim();
+                        if (cleanUrl.includes('hoichoi') || cleanUrl.includes('episode') || cleanUrl.includes('content')) {
+                            foundApiUrls.add(cleanUrl);
+                        }
+                    });
+                }
+            }
+            
+            log(`🔍 Found ${foundApiUrls.size} potential API URLs in HTML`);
+            if (foundApiUrls.size > 0) {
+                log(`🔍 API URLs:`, Array.from(foundApiUrls));
+            }
+            
+            // Try to construct API endpoint from show URL
+            // Hoichoi might use patterns like: /api/shows/{slug}/episodes or /api/content/{id}
+            const showSlugMatch = hoichoiUrl.match(/\/shows\/([^\/]+)/);
+            if (showSlugMatch) {
+                const showSlug = showSlugMatch[1];
+                const potentialApiEndpoints = [
+                    `https://www.hoichoi.tv/api/shows/${showSlug}/episodes`,
+                    `https://www.hoichoi.tv/api/shows/${showSlug}/seasons/${seasonNum}/episodes`,
+                    `https://www.hoichoi.tv/api/content/${showSlug}/episodes`,
+                    `https://api.hoichoi.tv/shows/${showSlug}/episodes`,
+                    `https://www.hoichoi.tv/shows/${showSlug}/episodes.json`,
+                    `https://www.hoichoi.tv/api/v1/shows/${showSlug}/episodes`
+                ];
+                
+                log(`🔍 Trying to fetch from potential API endpoints...`);
+                for (const apiUrl of potentialApiEndpoints) {
+                    try {
+                        let apiResponse;
+                        if (gmRequest) {
+                            apiResponse = await new Promise((resolve, reject) => {
+                                gmRequest({
+                                    method: 'GET',
+                                    url: apiUrl,
+                                    headers: {
+                                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                                        'Accept': 'application/json'
+                                    },
+                                    onload: function(response) {
+                                        if (response.status >= 200 && response.status < 300) {
+                                            try {
+                                                resolve(JSON.parse(response.responseText));
+                                            } catch (e) {
+                                                resolve(null);
+                                            }
+                                        } else {
+                                            resolve(null);
+                                        }
+                                    },
+                                    onerror: () => resolve(null),
+                                    timeout: 10000
+                                });
+                            });
+                        } else {
+                            try {
+                                const response = await fetch(apiUrl, {
+                                    headers: { 'Accept': 'application/json' }
+                                });
+                                if (response.ok) {
+                                    apiResponse = await response.json();
+                                }
+                            } catch (e) {
+                                // Continue to next endpoint
+                            }
+                        }
+                        
+                        if (apiResponse && (Array.isArray(apiResponse) || apiResponse.episodes || apiResponse.data)) {
+                            log(`✅ Found episode data from API: ${apiUrl}`);
+                            const episodeArray = Array.isArray(apiResponse) ? apiResponse : 
+                                               (apiResponse.episodes || apiResponse.data || []);
+                            
+                            if (episodeArray.length > 0) {
+                                const parsedEpisodes = episodeArray.map((ep, idx) => ({
+                                    episodeNumber: ep.episodeNumber || ep.episode_number || ep.number || ep.index || (idx + 1),
+                                    name: ep.name || ep.title || ep.Title || ep.episodeName || `Episode ${ep.episodeNumber || ep.episode_number || ep.number || (idx + 1)}`,
+                                    overview: ep.overview || ep.description || ep.plot || ep.synopsis || '',
+                                    airDate: ep.airDate || ep.air_date || ep.released || ep.publishedAt || '',
+                                    runtime: ep.runtime || ep.duration || ep.length || 0,
+                                    isHoichoiOnly: true,
+                                    descriptionSource: 'Hoichoi'
+                                }));
+                                
+                                log(`✅ Successfully parsed ${parsedEpisodes.length} episodes from API`);
+                                return parsedEpisodes;
+                            }
+                        }
+                    } catch (e) {
+                        log(`⚠️ API endpoint ${apiUrl} failed:`, e.message);
+                    }
+                }
+            }
+            
+            // Parse episodes from HTML (fallback)
             const episodes = parseHoichoiEpisodes(html, parseInt(seasonNum));
             
             log(`📊 Parsing result: ${episodes.length} episodes found`);
@@ -5651,7 +5759,7 @@
     
     window.tvdbHelperTest = function() {
         console.log('🧪 TVDB Helper Test Function');
-        console.log('Script version: 1.7.2');
+        console.log('Script version: 1.7.3');
         console.log('Current step:', getCurrentStep());
         console.log('Document ready:', document.readyState);
         console.log('Body exists:', !!document.body);
