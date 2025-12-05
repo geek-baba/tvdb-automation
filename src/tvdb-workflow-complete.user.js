@@ -425,63 +425,52 @@
 
     // Create floating toggle button
     function createFloatingToggle() {
-        // Remove existing toggle if any
-        const existingToggle = document.getElementById('tvdb-helper-toggle');
-        if (existingToggle) {
-            existingToggle.remove();
-        }
+        try {
+            // Remove existing toggle if any
+            const existingToggle = document.getElementById('tvdb-helper-toggle');
+            if (existingToggle) {
+                existingToggle.remove();
+            }
 
-        const toggleBtn = document.createElement('button');
-        toggleBtn.id = 'tvdb-helper-toggle';
-        toggleBtn.innerHTML = '🎬';
-        toggleBtn.title = 'TVDB Helper (Ctrl+Shift+T)';
-        toggleBtn.style.cssText = `
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            width: 50px;
-            height: 50px;
-            background: #2d5aa0;
-            color: white;
-            border: 2px solid #1a3d6b;
-            border-radius: 50%;
-            cursor: pointer;
-            font-size: 24px;
-            z-index: 99998;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        `;
-        
-        toggleBtn.addEventListener('click', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            forceShowPanel();
-        });
+            if (!document.body) {
+                setTimeout(createFloatingToggle, 100);
+                return;
+            }
 
-        toggleBtn.addEventListener('mouseenter', function() {
-            this.style.background = '#3d6ab0';
-            this.style.transform = 'scale(1.1)';
-        });
-
-        toggleBtn.addEventListener('mouseleave', function() {
-            this.style.background = '#2d5aa0';
-            this.style.transform = 'scale(1)';
-        });
-
-        // Ensure body exists before appending
-        if (!document.body) {
-            log('⚠️ document.body not ready for toggle button, waiting...');
-            setTimeout(() => {
-                if (document.body) {
-                    document.body.appendChild(toggleBtn);
-                    log('Floating toggle button created');
+            const toggleBtn = document.createElement('button');
+            toggleBtn.id = 'tvdb-helper-toggle';
+            toggleBtn.textContent = '🎬';
+            toggleBtn.title = 'TVDB Helper (Ctrl+Shift+T)';
+            toggleBtn.style.cssText = 'position: fixed; bottom: 20px; right: 20px; width: 50px; height: 50px; background: #2d5aa0; color: white; border: 2px solid #1a3d6b; border-radius: 50%; cursor: pointer; font-size: 24px; z-index: 99998; box-shadow: 0 4px 8px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center;';
+            
+            toggleBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                try {
+                    if (typeof forceShowPanel === 'function') {
+                        forceShowPanel();
+                    } else {
+                        init();
+                    }
+                } catch (err) {
+                    console.error('Error in toggle button click:', err);
                 }
-            }, 200);
-        } else {
+            });
+
+            toggleBtn.addEventListener('mouseenter', function() {
+                this.style.background = '#3d6ab0';
+                this.style.transform = 'scale(1.1)';
+            });
+
+            toggleBtn.addEventListener('mouseleave', function() {
+                this.style.background = '#2d5aa0';
+                this.style.transform = 'scale(1)';
+            });
+
             document.body.appendChild(toggleBtn);
             log('Floating toggle button created');
+        } catch (error) {
+            console.error('Error creating floating toggle:', error);
         }
     }
 
@@ -501,13 +490,14 @@
 
     // Create the user interface
     function createUI() {
-        // Remove existing UI if any
-        const existingUI = document.getElementById('tvdb-helper-ui');
-        if (existingUI) {
-            existingUI.remove();
-        }
+        try {
+            // Remove existing UI if any
+            const existingUI = document.getElementById('tvdb-helper-ui');
+            if (existingUI) {
+                existingUI.remove();
+            }
 
-        const currentStep = getCurrentStep();
+            const currentStep = getCurrentStep();
 
         // Create main container
         const container = document.createElement('div');
@@ -553,25 +543,54 @@
         `;
         document.head.appendChild(style);
 
-        container.innerHTML = generateUIHTML(currentStep);
+        try {
+            container.innerHTML = generateUIHTML(currentStep);
+        } catch (error) {
+            console.error('Error generating UI HTML:', error);
+            container.innerHTML = '<div style="padding: 20px; color: red;">Error generating UI. Check console for details.</div>';
+        }
         
         // Ensure body exists before appending
         if (!document.body) {
             log('⚠️ document.body not ready, waiting...');
             setTimeout(() => {
-                if (document.body) {
-                    document.body.appendChild(container);
-                    setupEventListeners();
-                    log('UI created successfully for step:', currentStep);
-                } else {
-                    log('❌ document.body still not available');
+                try {
+                    if (document.body) {
+                        document.body.appendChild(container);
+                        setupEventListeners();
+                        log('UI created successfully for step:', currentStep);
+                    } else {
+                        log('❌ document.body still not available');
+                    }
+                } catch (error) {
+                    console.error('Error appending UI to body:', error);
                 }
             }, 200);
         } else {
-            document.body.appendChild(container);
-            // Add event listeners
-            setupEventListeners();
-            log('UI created successfully for step:', currentStep);
+            try {
+                document.body.appendChild(container);
+                // Add event listeners
+                setupEventListeners();
+                log('UI created successfully for step:', currentStep);
+            } catch (error) {
+                console.error('Error appending UI to body:', error);
+                log('❌ Failed to append UI to body: ' + error.message);
+            }
+        } catch (error) {
+            console.error('Error in createUI:', error);
+            log('❌ Failed to create UI: ' + error.message);
+            // Try to show a minimal error UI
+            try {
+                const errorDiv = document.createElement('div');
+                errorDiv.id = 'tvdb-helper-ui';
+                errorDiv.style.cssText = 'position: fixed; top: 20px; right: 20px; background: red; color: white; padding: 15px; border-radius: 4px; z-index: 99999; max-width: 300px;';
+                errorDiv.innerHTML = '<strong>TVDB Helper Error</strong><br>' + error.message + '<br><small>Check console for details</small>';
+                if (document.body) {
+                    document.body.appendChild(errorDiv);
+                }
+            } catch (e) {
+                console.error('Failed to show error UI:', e);
+            }
         }
     }
 
@@ -4564,44 +4583,52 @@
     
     // Create immediate test indicator
     function createTestIndicator() {
-        const testDiv = document.createElement('div');
-        testDiv.id = 'tvdb-helper-test-indicator';
-        testDiv.style.cssText = `
-            position: fixed;
-            top: 10px;
-            left: 10px;
-            background: #ff6b6b;
-            color: white;
-            padding: 10px;
-            border-radius: 4px;
-            z-index: 999999;
-            font-size: 12px;
-            font-weight: bold;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-        `;
-        testDiv.textContent = '🎬 TVDB Helper Loaded - Press Ctrl+Shift+T';
-        testDiv.onclick = function() {
-            forceShowPanel();
-        };
-        
-        // Remove after 5 seconds
-        setTimeout(() => {
-            if (testDiv.parentNode) {
-                testDiv.style.opacity = '0.5';
-                testDiv.style.cursor = 'pointer';
-                testDiv.title = 'Click to show UI';
+        try {
+            if (!document.body) {
+                setTimeout(createTestIndicator, 100);
+                return;
             }
-        }, 5000);
-        
-        if (document.body) {
+            
+            // Remove existing indicator if any
+            const existing = document.getElementById('tvdb-helper-test-indicator');
+            if (existing) {
+                existing.remove();
+            }
+            
+            const testDiv = document.createElement('div');
+            testDiv.id = 'tvdb-helper-test-indicator';
+            testDiv.style.cssText = 'position: fixed; top: 10px; left: 10px; background: #ff6b6b; color: white; padding: 10px; border-radius: 4px; z-index: 999999; font-size: 12px; font-weight: bold; box-shadow: 0 2px 8px rgba(0,0,0,0.3); cursor: pointer;';
+            testDiv.textContent = '🎬 TVDB Helper Loaded - Press Ctrl+Shift+T';
+            testDiv.title = 'Click to show UI';
+            testDiv.onclick = function() {
+                try {
+                    if (typeof forceShowPanel === 'function') {
+                        forceShowPanel();
+                    } else {
+                        console.log('forceShowPanel not available yet, calling init...');
+                        init();
+                    }
+                } catch (e) {
+                    console.error('Error in test indicator click:', e);
+                }
+            };
+            
+            // Remove after 5 seconds
+            setTimeout(() => {
+                if (testDiv.parentNode) {
+                    testDiv.style.opacity = '0.5';
+                }
+            }, 5000);
+            
             document.body.appendChild(testDiv);
-        } else {
-            setTimeout(createTestIndicator, 100);
+            log('Test indicator created successfully');
+        } catch (error) {
+            console.error('Error creating test indicator:', error);
         }
     }
     
-    // Create test indicator immediately
-    createTestIndicator();
+    // Create test indicator after a short delay to ensure functions are defined
+    setTimeout(createTestIndicator, 200);
 
     // Start the script
     waitForPage();
