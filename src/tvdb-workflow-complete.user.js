@@ -691,7 +691,7 @@
 
                     <div id="tvdb-hoichoi-fields" style="margin-bottom: 15px; display: none;">
                         <label style="display: block; margin-bottom: 5px; color: #ccc;">Hoichoi Show URL:</label>
-                        <input type="text" id="tvdb-hoichoi-url" placeholder="e.g., https://www.hoichoi.tv/shows/chill-dil-hoichoi-mini"
+                        <input type="text" id="tvdb-hoichoi-url" placeholder="e.g., https://www.hoichoi.tv/shows/show-slug or /webseries/show-slug"
                                style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: #333; color: white; margin-bottom: 5px;"
                                value="">
                         <div style="font-size: 10px; color: #999; margin-bottom: 10px;">
@@ -745,7 +745,7 @@
 
                     <div id="tvdb-hoichoi-fields-step2" style="margin-bottom: 15px; display: none;">
                         <label style="display: block; margin-bottom: 5px; color: #ccc;">Hoichoi Show URL:</label>
-                        <input type="text" id="tvdb-hoichoi-url-step2" placeholder="e.g., https://www.hoichoi.tv/shows/chill-dil-hoichoi-mini"
+                        <input type="text" id="tvdb-hoichoi-url-step2" placeholder="e.g., https://www.hoichoi.tv/shows/show-slug or /webseries/show-slug"
                                style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: #333; color: white; margin-bottom: 5px;"
                                value="">
                         <div style="font-size: 10px; color: #999; margin-bottom: 10px;">
@@ -975,7 +975,7 @@ Or simple text format:
 
                     <div id="tvdb-hoichoi-url-fields-step5" style="margin-bottom: 15px; display: none;">
                         <label style="display: block; margin-bottom: 5px; color: #ccc;">Hoichoi Show URL:</label>
-                        <input type="text" id="tvdb-hoichoi-url-step5" placeholder="e.g., https://www.hoichoi.tv/shows/chill-dil-hoichoi-mini"
+                        <input type="text" id="tvdb-hoichoi-url-step5" placeholder="e.g., https://www.hoichoi.tv/shows/show-slug or /webseries/show-slug"
                                style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: #333; color: white; margin-bottom: 5px;"
                                value="${window.tvdbFetchedData?.officialSite || ''}">
                         <div style="font-size: 10px; color: #999; margin-bottom: 10px;">
@@ -1479,9 +1479,9 @@ Or simple text format:
             return;
         }
 
-        // Validate URL format
-        if (!hoichoiUrl.includes('hoichoi.tv/shows/')) {
-            updateStatus('Invalid Hoichoi URL. Expected format: https://www.hoichoi.tv/shows/show-slug');
+        // Validate URL format using flexible validation
+        if (!isValidHoichoiUrl(hoichoiUrl)) {
+            updateStatus(getHoichoiUrlErrorMessage());
             return;
         }
 
@@ -1863,9 +1863,9 @@ Or simple text format:
             return;
         }
 
-        // Validate URL format
-        if (!hoichoiUrl.includes('hoichoi.tv/shows/')) {
-            updateStatus('Invalid Hoichoi URL. Expected format: https://www.hoichoi.tv/shows/show-slug');
+        // Validate URL format using flexible validation
+        if (!isValidHoichoiUrl(hoichoiUrl)) {
+            updateStatus(getHoichoiUrlErrorMessage());
             return;
         }
 
@@ -2073,9 +2073,9 @@ Or simple text format:
             
             // Try to construct API endpoint from show URL
             // Hoichoi might use patterns like: /api/shows/{slug}/episodes or /api/content/{id}
-            const showSlugMatch = hoichoiUrl.match(/\/shows\/([^\/]+)/);
-            if (showSlugMatch) {
-                const showSlug = showSlugMatch[1];
+            // Use flexible slug extraction to support all URL formats
+            const showSlug = extractHoichoiSlug(hoichoiUrl);
+            if (showSlug) {
                 const potentialApiEndpoints = [
                     `https://www.hoichoi.tv/api/shows/${showSlug}/episodes`,
                     `https://www.hoichoi.tv/api/shows/${showSlug}/seasons/${seasonNum}/episodes`,
@@ -2859,9 +2859,9 @@ Or simple text format:
             return;
         }
 
-        // Validate URL format
-        if (!hoichoiUrl.includes('hoichoi.tv/shows/')) {
-            updateStatus('Invalid Hoichoi URL. Expected format: https://www.hoichoi.tv/shows/show-slug');
+        // Validate URL format using flexible validation
+        if (!isValidHoichoiUrl(hoichoiUrl)) {
+            updateStatus(getHoichoiUrlErrorMessage());
             return;
         }
 
@@ -3486,15 +3486,90 @@ Or simple text format:
     // Hoichoi Scraper Functions
     // ============================================================
 
+    // Flexible Hoichoi URL validation - accepts multiple formats
+    function isValidHoichoiUrl(url) {
+        if (!url || typeof url !== 'string') {
+            return false;
+        }
+        
+        // Normalize URL - ensure it has protocol
+        let normalizedUrl = url.trim();
+        if (!normalizedUrl.startsWith('http://') && !normalizedUrl.startsWith('https://')) {
+            normalizedUrl = 'https://' + normalizedUrl;
+        }
+        
+        // Check if it's a hoichoi.tv domain
+        if (!normalizedUrl.includes('hoichoi.tv')) {
+            return false;
+        }
+        
+        // Accept multiple URL patterns:
+        // - /shows/show-slug (plural)
+        // - /show/show-slug (singular)
+        // - /webseries/show-slug
+        // - /series/show-slug
+        // - /content/show-slug
+        const validPatterns = [
+            /hoichoi\.tv\/shows\/[^\/\s]+/i,
+            /hoichoi\.tv\/show\/[^\/\s]+/i,
+            /hoichoi\.tv\/webseries\/[^\/\s]+/i,
+            /hoichoi\.tv\/series\/[^\/\s]+/i,
+            /hoichoi\.tv\/content\/[^\/\s]+/i
+        ];
+        
+        return validPatterns.some(pattern => pattern.test(normalizedUrl));
+    }
+
+    // Extract show slug from Hoichoi URL (works with all formats)
+    function extractHoichoiSlug(url) {
+        if (!url || typeof url !== 'string') {
+            return null;
+        }
+        
+        // Normalize URL
+        let normalizedUrl = url.trim();
+        if (!normalizedUrl.startsWith('http://') && !normalizedUrl.startsWith('https://')) {
+            normalizedUrl = 'https://' + normalizedUrl;
+        }
+        
+        // Try to extract slug from various patterns
+        const slugPatterns = [
+            /hoichoi\.tv\/shows\/([^\/\s?#]+)/i,
+            /hoichoi\.tv\/show\/([^\/\s?#]+)/i,
+            /hoichoi\.tv\/webseries\/([^\/\s?#]+)/i,
+            /hoichoi\.tv\/series\/([^\/\s?#]+)/i,
+            /hoichoi\.tv\/content\/([^\/\s?#]+)/i
+        ];
+        
+        for (const pattern of slugPatterns) {
+            const match = normalizedUrl.match(pattern);
+            if (match && match[1]) {
+                return match[1];
+            }
+        }
+        
+        return null;
+    }
+
+    // Get user-friendly error message for invalid Hoichoi URLs
+    function getHoichoiUrlErrorMessage() {
+        return 'Invalid Hoichoi URL. Expected formats:\n' +
+               '• https://www.hoichoi.tv/shows/show-slug\n' +
+               '• https://www.hoichoi.tv/show/show-slug\n' +
+               '• https://www.hoichoi.tv/webseries/show-slug\n' +
+               '• https://www.hoichoi.tv/series/show-slug\n' +
+               '• https://www.hoichoi.tv/content/show-slug';
+    }
+
     // Fetch and scrape Hoichoi show page
     async function fetchHoichoiShow(url) {
         try {
             log(`🔍 Fetching Hoichoi show from: ${url}`);
             updateStatus('Fetching data from Hoichoi...');
 
-            // Validate URL
-            if (!url || !url.includes('hoichoi.tv/shows/')) {
-                throw new Error('Invalid Hoichoi URL. Expected format: https://www.hoichoi.tv/shows/show-slug');
+            // Validate URL using flexible validation
+            if (!isValidHoichoiUrl(url)) {
+                throw new Error(getHoichoiUrlErrorMessage());
             }
 
             // Ensure URL has protocol
