@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TVDB Workflow Helper - Complete
 // @namespace    tvdb.workflow
-// @version      1.6.1
+// @version      1.6.2
 // @description  Complete TVDB 5-step workflow helper with TMDB/OMDb/Hoichoi integration and flexible data source modes
 // @author       you
 // @match        https://thetvdb.com/series/create*
@@ -29,7 +29,7 @@
     'use strict';
 
     // Immediate console logs to verify script is running
-    console.log('🎬 TVDB Workflow Helper v1.6.1 - Script file loaded');
+    console.log('🎬 TVDB Workflow Helper v1.6.2 - Script file loaded');
     console.log('📍 Current URL:', window.location.href);
     console.log('📍 Current pathname:', window.location.pathname);
     console.log('📋 Complete 5-step TVDB submission automation');
@@ -2729,7 +2729,8 @@
                     log('✅ Page HTML fetched successfully via fetch');
                 } catch (fetchError) {
                     log('❌ Fetch error details:', fetchError);
-                    throw new Error(`Failed to fetch: ${fetchError.message || 'CORS or network error. Make sure @connect www.hoichoi.tv is in the script header.`}`);
+                    const errorMsg = fetchError.message || 'CORS or network error. Make sure @connect www.hoichoi.tv is in the script header.';
+                    throw new Error('Failed to fetch: ' + errorMsg);
                 }
             }
 
