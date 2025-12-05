@@ -5126,54 +5126,60 @@ Or simple text format:
         
         const count = Math.min(25, Math.min(rows.length, eps.length));
 
-        // Strategy: Fill episode numbers first for all rows, then fill details
-        // This prevents overwriting issues
-        log(`📊 Step 1: Filling episode numbers for ${count} rows...`);
-        for (let i = 0; i < count && i < rows.length; i++) {
-            const row = rows[i];
-            const ep = eps[i];
-            if (!row || !ep) continue;
-            
-            const numEl = inputByLabelWithin(row, 'Episode #');
-            if (numEl) {
-                numEl.value = String(ep.episode_number);
-                fire(numEl, 'input');
-                fire(numEl, 'change');
-                log(`📊 Set episode # ${ep.episode_number} in row ${i}`);
-            }
-            await sleep(30);
-        }
+        // Strategy: Fill episodes one at a time, ensuring each row is only filled once
+        // Track which rows have been used to prevent overwriting
+        const usedRows = new Set();
         
-        // Wait a bit for form to update
-        await sleep(200);
+        log(`📊 Filling ${count} episodes into ${rows.length} rows...`);
         
-        // Step 2: Now fill all details, matching by episode number
-        log(`📊 Step 2: Filling episode details...`);
         for (let i = 0; i < count; i++) {
             const ep = eps[i];
-            if (!ep) continue;
+            if (!ep) {
+                log(`⚠️ No episode at index ${i}`);
+                continue;
+            }
             
-            // Find the row that has this episode number
+            // Find an unused row for this episode
             let targetRow = null;
-            for (const row of rows) {
+            let targetRowIndex = -1;
+            
+            // First, try to find a row that already has this episode number (if it was pre-filled)
+            for (let r = 0; r < rows.length; r++) {
+                if (usedRows.has(r)) continue; // Skip already used rows
+                
+                const row = rows[r];
                 const numEl = inputByLabelWithin(row, 'Episode #');
                 if (numEl && numEl.value && parseInt(numEl.value) === ep.episode_number) {
                     targetRow = row;
+                    targetRowIndex = r;
+                    log(`📊 Found row ${r} with matching episode # ${ep.episode_number}`);
                     break;
                 }
             }
             
-            // Fallback: use row at index i if no match found
-            if (!targetRow && i < rows.length) {
-                targetRow = rows[i];
+            // If no matching row found, use the first unused row
+            if (!targetRow) {
+                for (let r = 0; r < rows.length; r++) {
+                    if (!usedRows.has(r)) {
+                        targetRow = rows[r];
+                        targetRowIndex = r;
+                        log(`📊 Using unused row ${r} for Episode ${ep.episode_number}`);
+                        break;
+                    }
+                }
             }
             
             if (!targetRow) {
-                log(`⚠️ fillBulkTMDB: No row found for Episode ${ep.episode_number}`);
+                log(`⚠️ No available row for Episode ${ep.episode_number}`);
                 continue;
             }
             
-            log(`📊 fillBulkTMDB: Filling Episode ${ep.episode_number} "${ep.name}" into row`);
+            // Mark this row as used
+            usedRows.add(targetRowIndex);
+            
+            log(`📊 Filling Episode ${ep.episode_number} "${ep.name}" into row ${targetRowIndex} (row ${usedRows.size}/${count})`);
+            
+            // Fill the entire row at once
             fillRow(targetRow, {
                 num: ep.episode_number,
                 name: ep.name,
@@ -5182,9 +5188,11 @@ Or simple text format:
                 runtime: ep.runtime || seasonAvg
             });
             
-            // Small delay to ensure form updates properly
-            await sleep(50);
+            // Wait between fills to ensure form updates properly
+            await sleep(100);
         }
+        
+        log(`✅ Completed filling ${usedRows.size} episodes`);
         log(`Episodes filled (TMDB). Review, tweak, submit.`);
     }
 
