@@ -12,6 +12,7 @@
 // @run-at       document-end
 // @grant        GM_setValue
 // @grant        GM_getValue
+// @grant        GM_xmlhttpRequest
 // @connect      api.themoviedb.org
 // @connect      www.omdbapi.com
 // @connect      www.hoichoi.tv
@@ -2516,14 +2517,55 @@
                 throw new Error('Invalid Hoichoi URL. Expected format: https://www.hoichoi.tv/shows/show-slug');
             }
 
-            // Fetch page HTML
-            const response = await fetch(url);
-            if (!response.ok) {
-                throw new Error(`Failed to fetch page: ${response.status} ${response.statusText}`);
+            // Ensure URL has protocol
+            if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                url = 'https://' + url;
             }
 
-            const html = await response.text();
-            log('✅ Page HTML fetched');
+            // Fetch page HTML using GM_xmlhttpRequest (works better with CORS in Tampermonkey)
+            let html;
+            if (typeof GM_xmlhttpRequest !== 'undefined') {
+                // Use GM_xmlhttpRequest if available (Tampermonkey)
+                html = await new Promise((resolve, reject) => {
+                    GM_xmlhttpRequest({
+                        method: 'GET',
+                        url: url,
+                        headers: {
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                        },
+                        onload: function(response) {
+                            if (response.status >= 200 && response.status < 300) {
+                                log('✅ Page HTML fetched successfully via GM_xmlhttpRequest');
+                                resolve(response.responseText);
+                            } else {
+                                reject(new Error(`Failed to fetch page: ${response.status} ${response.statusText}`));
+                            }
+                        },
+                        onerror: function(error) {
+                            log('❌ GM_xmlhttpRequest error:', error);
+                            reject(new Error(`Network error: ${error.message || 'Failed to fetch'}`));
+                        },
+                        ontimeout: function() {
+                            reject(new Error('Request timeout'));
+                        },
+                        timeout: 30000 // 30 second timeout
+                    });
+                });
+            } else {
+                // Fallback to fetch (for other userscript managers or if GM_xmlhttpRequest not available)
+                log('⚠️ GM_xmlhttpRequest not available, using fetch');
+                const response = await fetch(url, {
+                    method: 'GET',
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                    }
+                });
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch page: ${response.status} ${response.statusText}`);
+                }
+                html = await response.text();
+                log('✅ Page HTML fetched successfully via fetch');
+            }
 
             // Parse the page
             const scrapedData = parseHoichoiPage(html, url);
