@@ -5126,31 +5126,46 @@ Or simple text format:
         
         const count = Math.min(25, Math.min(rows.length, eps.length));
 
-        // Match episodes to rows by episode number, not by array index
-        // This ensures Episode 1 goes to the row that should have episode 1, etc.
+        // Strategy: Fill episode numbers first for all rows, then fill details
+        // This prevents overwriting issues
+        log(`📊 Step 1: Filling episode numbers for ${count} rows...`);
+        for (let i = 0; i < count && i < rows.length; i++) {
+            const row = rows[i];
+            const ep = eps[i];
+            if (!row || !ep) continue;
+            
+            const numEl = inputByLabelWithin(row, 'Episode #');
+            if (numEl) {
+                numEl.value = String(ep.episode_number);
+                fire(numEl, 'input');
+                fire(numEl, 'change');
+                log(`📊 Set episode # ${ep.episode_number} in row ${i}`);
+            }
+            await sleep(30);
+        }
+        
+        // Wait a bit for form to update
+        await sleep(200);
+        
+        // Step 2: Now fill all details, matching by episode number
+        log(`📊 Step 2: Filling episode details...`);
         for (let i = 0; i < count; i++) {
             const ep = eps[i];
-            if (!ep) {
-                log(`⚠️ fillBulkTMDB: No episode at index ${i}`);
-                continue;
-            }
+            if (!ep) continue;
             
-            // Try to find the row that should have this episode number
-            // First, try to find a row that already has this episode number
+            // Find the row that has this episode number
             let targetRow = null;
             for (const row of rows) {
                 const numEl = inputByLabelWithin(row, 'Episode #');
                 if (numEl && numEl.value && parseInt(numEl.value) === ep.episode_number) {
                     targetRow = row;
-                    log(`📊 Found row with matching episode # ${ep.episode_number}`);
                     break;
                 }
             }
             
-            // If no matching row found, use row at index i (assuming rows are in order)
+            // Fallback: use row at index i if no match found
             if (!targetRow && i < rows.length) {
                 targetRow = rows[i];
-                log(`📊 Using row at index ${i} for Episode ${ep.episode_number}`);
             }
             
             if (!targetRow) {
