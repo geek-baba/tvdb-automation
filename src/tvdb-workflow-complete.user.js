@@ -5118,6 +5118,9 @@ Or simple text format:
         log(`📊 fillBulkTMDB: Filling ${count} episodes...`);
         log(`📊 Episode order:`, eps.map(e => `Ep ${e.episode_number}: "${e.name}"`).join(', '));
 
+        // Track which episode numbers have been filled to prevent duplicates
+        const filledEpisodes = new Set();
+
         // Fill episodes one at a time, re-gathering rows each time to handle DOM changes
         for (let i = 0; i < count; i++) {
             const ep = eps[i];
@@ -5147,6 +5150,12 @@ Or simple text format:
             const currentNum = numEl ? (numEl.value ? parseInt(numEl.value) : null) : null;
             const currentName = nameEl ? nameEl.value : '';
             
+            // Check if we've already filled this episode number
+            if (filledEpisodes.has(ep.episode_number)) {
+                log(`⚠️ Episode ${ep.episode_number} has already been filled! Skipping to prevent duplicate.`);
+                continue;
+            }
+            
             // Check if this row already has a different episode filled
             if (currentNum && currentNum !== ep.episode_number && currentName && currentName.trim().length > 0) {
                 log(`⚠️ Row ${i} already has Episode ${currentNum} "${currentName}", but we want Episode ${ep.episode_number}. Looking for empty row...`);
@@ -5170,21 +5179,16 @@ Or simple text format:
                             date: ep.air_date,
                             runtime: ep.runtime || seasonAvg
                         });
+                        filledEpisodes.add(ep.episode_number);
                         foundEmptyRow = true;
                         break;
                     }
                 }
                 
                 if (!foundEmptyRow) {
-                    log(`⚠️ No empty row found. Row ${i} has Episode ${currentNum}, but we'll fill Episode ${ep.episode_number} anyway (may overwrite)`);
-            fillRow(row, {
-                num: ep.episode_number,
-                name: ep.name,
-                overview: ep.overview,
-                date: ep.air_date,
-                runtime: ep.runtime || seasonAvg
-            });
-        }
+                    log(`⚠️ No empty row found. Skipping Episode ${ep.episode_number} to avoid overwriting Episode ${currentNum}`);
+                    continue;
+                }
             } else {
                 // Row is empty or has matching episode number - safe to fill
                 log(`📊 [${i+1}/${count}] Filling row ${i} (current: Ep ${currentNum || 'empty'}) with Episode ${ep.episode_number}: "${ep.name}"`);
@@ -5195,6 +5199,7 @@ Or simple text format:
                     date: ep.air_date,
                     runtime: ep.runtime || seasonAvg
                 });
+                filledEpisodes.add(ep.episode_number);
             }
             
             // Wait between fills to ensure form updates properly
