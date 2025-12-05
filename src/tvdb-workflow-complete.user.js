@@ -1736,6 +1736,10 @@ Or simple text format:
             // Sort episodes by episode number to ensure correct order
             episodes.sort((a, b) => (a.episodeNumber || 0) - (b.episodeNumber || 0));
             
+            // Sort episodes by episode number to ensure correct order
+            episodes.sort((a, b) => (a.episodeNumber || 0) - (b.episodeNumber || 0));
+            log(`✅ Sorted ${episodes.length} episodes by episode number`);
+            
             // Store episode data globally
             window.tvdbEpisodeData = {
                 season: parseInt(seasonNum),
@@ -2192,6 +2196,10 @@ Or simple text format:
                 throw new Error('No episodes found on Hoichoi page. The page structure may have changed or episodes may be loaded dynamically via JavaScript. Check the browser console for detailed logs.');
             }
 
+            // Sort episodes by episode number to ensure correct order
+            episodes.sort((a, b) => (a.episodeNumber || 0) - (b.episodeNumber || 0));
+            log(`✅ Sorted ${episodes.length} episodes by episode number`);
+            
             // Store episode data globally
             window.tvdbEpisodeData = {
                 season: parseInt(seasonNum),
