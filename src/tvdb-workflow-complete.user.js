@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TVDB Workflow Helper - Complete
 // @namespace    tvdb.workflow
-// @version      1.7.0
+// @version      1.7.1
 // @description  Complete TVDB 5-step workflow helper with TMDB/OMDb/Hoichoi integration and flexible data source modes
 // @author       you
 // @match        https://thetvdb.com/series/create*
@@ -29,7 +29,7 @@
     'use strict';
 
     // Immediate console logs to verify script is running
-    console.log('🎬 TVDB Workflow Helper v1.7.0 - Script file loaded');
+    console.log('🎬 TVDB Workflow Helper v1.7.1 - Script file loaded');
     console.log('📍 Current URL:', window.location.href);
     console.log('📍 Current pathname:', window.location.pathname);
     console.log('📋 Complete 5-step TVDB submission automation');
@@ -1899,13 +1899,24 @@
                 html = await response.text();
             }
 
+            // Log HTML sample for debugging
+            log(`📄 HTML fetched: ${html.length} characters`);
+            log(`📄 HTML sample (first 2000 chars): ${html.substring(0, 2000)}`);
+            
             // Parse episodes from HTML
             const episodes = parseHoichoiEpisodes(html, parseInt(seasonNum));
+            
+            log(`📊 Parsing result: ${episodes.length} episodes found`);
+            if (episodes.length > 0) {
+                log(`📊 First episode sample:`, JSON.stringify(episodes[0], null, 2));
+            }
             
             if (!episodes || episodes.length === 0) {
                 // Provide more helpful error message with debugging info
                 log('❌ Episode parsing failed. HTML length:', html.length);
                 log('❌ Attempted multiple parsing strategies but found no episodes.');
+                log('❌ HTML contains "episode":', html.toLowerCase().includes('episode'));
+                log('❌ HTML contains "S1 E1":', html.includes('S1 E1') || html.includes('S1E1'));
                 throw new Error('No episodes found on Hoichoi page. The page structure may have changed or episodes may be loaded dynamically via JavaScript. Check the browser console for detailed logs.');
             }
 
@@ -3217,7 +3228,8 @@
         const doc = parser.parseFromString(html, 'text/html');
         const episodes = [];
 
-        log(`Parsing Hoichoi episodes for season ${seasonNum}`);
+        log(`🔍 Parsing Hoichoi episodes for season ${seasonNum}`);
+        log(`🔍 HTML length: ${html.length} characters`);
 
         // Strategy 1: Try to extract from JSON data in script tags (most reliable)
         try {
@@ -3587,7 +3599,7 @@
 
                 // Only add episode if we have at least a valid episode number
                 if (episodeNumber > 0) {
-                    episodes.push({
+                    const episodeData = {
                         episodeNumber: episodeNumber,
                         name: name,
                         overview: overview,
@@ -3595,9 +3607,18 @@
                         runtime: runtime || 0,
                         isHoichoiOnly: true,
                         descriptionSource: 'Hoichoi'
-                    });
+                    };
                     
-                    log(`Parsed Episode ${episodeNumber}: "${name}" (${runtime || 0}m, ${overview.length} chars description)`);
+                    episodes.push(episodeData);
+                    
+                    log(`✅ Parsed Episode ${episodeNumber}:`);
+                    log(`   Title: "${name}"`);
+                    log(`   Runtime: ${runtime || 0} minutes`);
+                    log(`   Description: ${overview.length} characters`);
+                    log(`   Full element text sample: ${fullText.substring(0, 200)}`);
+                } else {
+                    log(`⚠️ Skipped element ${index}: Could not determine episode number`);
+                    log(`   Element text: ${fullText.substring(0, 200)}`);
                 }
 
             } catch (error) {
@@ -3695,6 +3716,51 @@
 
         log(`Parsed ${uniqueEpisodes.length} unique episodes from Hoichoi`);
         
+        // Strategy 7: If still no episodes, try direct text pattern matching from HTML
+        if (uniqueEpisodes.length === 0) {
+            log('⚠️ No episodes found with DOM parsing. Trying direct text pattern matching...');
+            
+            // Look for patterns like "S1 E1", "Episode 1", etc. followed by titles
+            const episodePatterns = [
+                /S\d+\s*E(\d+)[^<]*?([A-Z][^<]{10,100})/gi,
+                /Episode\s+(\d+)[^<]*?([A-Z][^<]{10,100})/gi,
+                /Ep\s+(\d+)[^<]*?([A-Z][^<]{10,100})/gi
+            ];
+            
+            for (const pattern of episodePatterns) {
+                const matches = [...html.matchAll(pattern)];
+                if (matches.length > 0) {
+                    log(`Found ${matches.length} potential episodes with pattern: ${pattern}`);
+                    matches.forEach((match, idx) => {
+                        const epNum = parseInt(match[1]);
+                        const title = match[2]?.trim() || `Episode ${epNum}`;
+                        if (epNum > 0 && epNum <= 100) {
+                            episodes.push({
+                                episodeNumber: epNum,
+                                name: title.replace(/\s*-\s*(Hindi|Bengali|English|Tamil|Telugu)$/i, '').trim(),
+                                overview: '',
+                                airDate: '',
+                                runtime: 0,
+                                isHoichoiOnly: true,
+                                descriptionSource: 'Hoichoi'
+                            });
+                        }
+                    });
+                    if (episodes.length > 0) break;
+                }
+            }
+            
+            // Update unique episodes after pattern matching
+            uniqueEpisodes = [];
+            const seenNumbers = new Set();
+            episodes.forEach(ep => {
+                if (!seenNumbers.has(ep.episodeNumber)) {
+                    seenNumbers.add(ep.episodeNumber);
+                    uniqueEpisodes.push(ep);
+                }
+            });
+        }
+        
         // Debug: Log HTML structure if no episodes found
         if (uniqueEpisodes.length === 0) {
             log('⚠️ DEBUG: No episodes found. HTML structure analysis:');
@@ -3702,8 +3768,21 @@
             log(`- Total links: ${doc.querySelectorAll('a').length}`);
             log(`- Total divs: ${doc.querySelectorAll('div').length}`);
             log(`- Page title: ${doc.querySelector('title')?.textContent || 'N/A'}`);
-            // Log a sample of the HTML for debugging (first 2000 chars)
-            log(`- HTML sample: ${html.substring(0, 2000)}`);
+            
+            // Check for common episode-related text
+            const htmlLower = html.toLowerCase();
+            log(`- Contains "episode": ${htmlLower.includes('episode')}`);
+            log(`- Contains "s1 e1": ${htmlLower.includes('s1 e1') || htmlLower.includes('s1e1')}`);
+            log(`- Contains "season": ${htmlLower.includes('season')}`);
+            log(`- Contains "9m" or runtime: ${htmlLower.match(/\d+m/)}`);
+            
+            // Log a sample of the HTML for debugging (first 3000 chars)
+            log(`- HTML sample: ${html.substring(0, 3000)}`);
+        } else {
+            log(`✅ Successfully extracted ${uniqueEpisodes.length} episodes`);
+            uniqueEpisodes.forEach(ep => {
+                log(`   Ep ${ep.episodeNumber}: "${ep.name}" (${ep.runtime}m)`);
+            });
         }
         
         return uniqueEpisodes;
@@ -5494,7 +5573,7 @@
     
     window.tvdbHelperTest = function() {
         console.log('🧪 TVDB Helper Test Function');
-        console.log('Script version: 1.7.0');
+        console.log('Script version: 1.7.1');
         console.log('Current step:', getCurrentStep());
         console.log('Document ready:', document.readyState);
         console.log('Body exists:', !!document.body);
