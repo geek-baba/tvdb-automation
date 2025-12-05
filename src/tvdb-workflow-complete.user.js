@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TVDB Workflow Helper - Complete
 // @namespace    tvdb.workflow
-// @version      1.7.4
+// @version      1.7.5
 // @description  Complete TVDB 5-step workflow helper with TMDB/OMDb/Hoichoi integration and flexible data source modes
 // @author       you
 // @match        https://thetvdb.com/series/create*
@@ -19,7 +19,13 @@
 // @connect      www.hoichoi.tv
 // @connect      hoichoi.tv
 // @connect      *.hoichoi.tv
+// @connect      hoichoicdn.com
+// @connect      *.hoichoicdn.com
 // @connect      image.hoichoicdn.com
+// @connect      hoichoi.dev
+// @connect      *.hoichoi.dev
+// @connect      sub.hoichoi.dev
+// @connect      prod-content-api.hoichoi.dev
 // @connect      libretranslate.com
 // @connect      libretranslate.de
 // @connect      api.mymemory.translated.net
@@ -29,7 +35,7 @@
     'use strict';
 
     // Immediate console logs to verify script is running
-    console.log('🎬 TVDB Workflow Helper v1.7.4 - Script file loaded');
+    console.log('🎬 TVDB Workflow Helper v1.7.5 - Script file loaded');
     console.log('📍 Current URL:', window.location.href);
     console.log('📍 Current pathname:', window.location.pathname);
     console.log('📋 Complete 5-step TVDB submission automation');
@@ -6036,7 +6042,7 @@
     
     window.tvdbHelperTest = function() {
         console.log('🧪 TVDB Helper Test Function');
-        console.log('Script version: 1.7.4');
+        console.log('Script version: 1.7.5');
         console.log('Current step:', getCurrentStep());
         console.log('Document ready:', document.readyState);
         console.log('Body exists:', !!document.body);
