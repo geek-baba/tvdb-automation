@@ -16,6 +16,8 @@
 // @connect      api.themoviedb.org
 // @connect      www.omdbapi.com
 // @connect      www.hoichoi.tv
+// @connect      hoichoi.tv
+// @connect      *.hoichoi.tv
 // @connect      image.hoichoicdn.com
 // @connect      libretranslate.com
 // @connect      libretranslate.de
@@ -1931,8 +1933,18 @@
             log('Hoichoi fetch completed', window.tvdbFetchedData);
 
         } catch (error) {
-            updateStatus(`Error fetching Hoichoi data: ${error.message}`);
+            const errorMsg = error.message || error.toString() || 'Unknown error';
             log('Error fetching Hoichoi data:', error);
+            log('Error stack:', error.stack);
+            log('Error details:', JSON.stringify(error));
+            
+            // Provide more helpful error message
+            let userFriendlyMsg = `Error fetching Hoichoi data: ${errorMsg}`;
+            if (errorMsg.includes('Failed to fetch') || errorMsg.includes('CORS')) {
+                userFriendlyMsg += '\n\nPossible solutions:\n1. Check Tampermonkey permissions for hoichoi.tv\n2. Make sure @connect www.hoichoi.tv is in script header\n3. Try refreshing the page';
+            }
+            
+            updateStatus(userFriendlyMsg);
         }
     }
 
@@ -2524,47 +2536,73 @@
 
             // Fetch page HTML using GM_xmlhttpRequest (works better with CORS in Tampermonkey)
             let html;
-            if (typeof GM_xmlhttpRequest !== 'undefined') {
+            
+            // Check for GM_xmlhttpRequest in multiple ways (Tampermonkey exposes it differently)
+            const gmRequest = typeof GM_xmlhttpRequest !== 'undefined' ? GM_xmlhttpRequest :
+                             typeof unsafeWindow !== 'undefined' && unsafeWindow.GM_xmlhttpRequest ? unsafeWindow.GM_xmlhttpRequest :
+                             typeof window !== 'undefined' && window.GM_xmlhttpRequest ? window.GM_xmlhttpRequest :
+                             null;
+            
+            log(`GM_xmlhttpRequest available: ${!!gmRequest}`);
+            
+            if (gmRequest) {
                 // Use GM_xmlhttpRequest if available (Tampermonkey)
+                log('Using GM_xmlhttpRequest for cross-origin request');
                 html = await new Promise((resolve, reject) => {
-                    GM_xmlhttpRequest({
-                        method: 'GET',
-                        url: url,
-                        headers: {
-                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-                        },
-                        onload: function(response) {
-                            if (response.status >= 200 && response.status < 300) {
-                                log('✅ Page HTML fetched successfully via GM_xmlhttpRequest');
-                                resolve(response.responseText);
-                            } else {
-                                reject(new Error(`Failed to fetch page: ${response.status} ${response.statusText}`));
-                            }
-                        },
-                        onerror: function(error) {
-                            log('❌ GM_xmlhttpRequest error:', error);
-                            reject(new Error(`Network error: ${error.message || 'Failed to fetch'}`));
-                        },
-                        ontimeout: function() {
-                            reject(new Error('Request timeout'));
-                        },
-                        timeout: 30000 // 30 second timeout
-                    });
+                    try {
+                        gmRequest({
+                            method: 'GET',
+                            url: url,
+                            headers: {
+                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                            },
+                            onload: function(response) {
+                                log(`GM_xmlhttpRequest response status: ${response.status}`);
+                                if (response.status >= 200 && response.status < 300) {
+                                    log('✅ Page HTML fetched successfully via GM_xmlhttpRequest');
+                                    resolve(response.responseText);
+                                } else {
+                                    const errorMsg = `HTTP ${response.status}: ${response.statusText || 'Unknown error'}`;
+                                    log(`❌ GM_xmlhttpRequest failed: ${errorMsg}`);
+                                    reject(new Error(errorMsg));
+                                }
+                            },
+                            onerror: function(error) {
+                                log('❌ GM_xmlhttpRequest onerror called:', JSON.stringify(error));
+                                const errorMsg = error.error || error.message || 'Network error: Failed to fetch';
+                                reject(new Error(errorMsg));
+                            },
+                            ontimeout: function() {
+                                log('❌ GM_xmlhttpRequest timeout');
+                                reject(new Error('Request timeout after 30 seconds'));
+                            },
+                            timeout: 30000 // 30 second timeout
+                        });
+                    } catch (err) {
+                        log('❌ Exception in GM_xmlhttpRequest setup:', err);
+                        reject(new Error(`GM_xmlhttpRequest setup failed: ${err.message || err}`));
+                    }
                 });
             } else {
                 // Fallback to fetch (for other userscript managers or if GM_xmlhttpRequest not available)
-                log('⚠️ GM_xmlhttpRequest not available, using fetch');
-                const response = await fetch(url, {
-                    method: 'GET',
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                log('⚠️ GM_xmlhttpRequest not available, using fetch (may fail due to CORS)');
+                try {
+                    const response = await fetch(url, {
+                        method: 'GET',
+                        mode: 'cors',
+                        headers: {
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                        }
+                    });
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                     }
-                });
-                if (!response.ok) {
-                    throw new Error(`Failed to fetch page: ${response.status} ${response.statusText}`);
+                    html = await response.text();
+                    log('✅ Page HTML fetched successfully via fetch');
+                } catch (fetchError) {
+                    log('❌ Fetch error details:', fetchError);
+                    throw new Error(`Failed to fetch: ${fetchError.message || 'CORS or network error. Make sure @connect www.hoichoi.tv is in the script header.`}`);
                 }
-                html = await response.text();
-                log('✅ Page HTML fetched successfully via fetch');
             }
 
             // Parse the page
