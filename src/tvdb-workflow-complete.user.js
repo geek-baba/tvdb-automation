@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TVDB Workflow Helper - Complete
 // @namespace    tvdb.workflow
-// @version      1.6.8
+// @version      1.6.9
 // @description  Complete TVDB 5-step workflow helper with TMDB/OMDb/Hoichoi integration and flexible data source modes
 // @author       you
 // @match        https://thetvdb.com/series/create*
@@ -29,7 +29,7 @@
     'use strict';
 
     // Immediate console logs to verify script is running
-    console.log('🎬 TVDB Workflow Helper v1.6.8 - Script file loaded');
+    console.log('🎬 TVDB Workflow Helper v1.6.9 - Script file loaded');
     console.log('📍 Current URL:', window.location.href);
     console.log('📍 Current pathname:', window.location.pathname);
     console.log('📋 Complete 5-step TVDB submission automation');
@@ -1903,7 +1903,10 @@
             const episodes = parseHoichoiEpisodes(html, parseInt(seasonNum));
             
             if (!episodes || episodes.length === 0) {
-                throw new Error('No episodes found on Hoichoi page for this season');
+                // Provide more helpful error message with debugging info
+                log('❌ Episode parsing failed. HTML length:', html.length);
+                log('❌ Attempted multiple parsing strategies but found no episodes.');
+                throw new Error('No episodes found on Hoichoi page. The page structure may have changed or episodes may be loaded dynamically via JavaScript. Check the browser console for detailed logs.');
             }
 
             // Store episode data globally
@@ -3216,16 +3219,113 @@
 
         log(`Parsing Hoichoi episodes for season ${seasonNum}`);
 
-        // Try multiple selectors to find episode lists
-        // Hoichoi typically has episodes in cards or lists
+        // Strategy 1: Try to extract from JSON data in script tags (most reliable)
+        try {
+            const scriptTags = doc.querySelectorAll('script[type="application/json"], script[id*="__NEXT_DATA__"], script:not([src])');
+            for (const script of scriptTags) {
+                try {
+                    const scriptText = script.textContent || script.innerHTML;
+                    if (!scriptText || scriptText.length < 100) continue;
+
+                    // Try to find episode data in JSON
+                    const jsonMatches = scriptText.match(/\{[^{}]*(?:episodes|episode|Episodes|Episode)[^{}]*\}/g);
+                    if (jsonMatches) {
+                        for (const jsonStr of jsonMatches) {
+                            try {
+                                const data = JSON.parse(jsonStr);
+                                if (data.episodes || data.Episodes || (Array.isArray(data) && data.length > 0)) {
+                                    const foundEpisodes = data.episodes || data.Episodes || data;
+                                    if (Array.isArray(foundEpisodes) && foundEpisodes.length > 0) {
+                                        log(`Found ${foundEpisodes.length} episodes in JSON data`);
+                                        foundEpisodes.forEach((ep, idx) => {
+                                            if (ep && (ep.episodeNumber || ep.episode_number || ep.number || ep.Episode || idx >= 0)) {
+                                                episodes.push({
+                                                    episodeNumber: ep.episodeNumber || ep.episode_number || ep.number || ep.Episode || (idx + 1),
+                                                    name: ep.name || ep.title || ep.Title || `Episode ${ep.episodeNumber || ep.episode_number || ep.number || ep.Episode || (idx + 1)}`,
+                                                    overview: ep.overview || ep.description || ep.plot || ep.Plot || '',
+                                                    airDate: ep.airDate || ep.air_date || ep.released || ep.Released || '',
+                                                    runtime: ep.runtime || ep.duration || 0,
+                                                    isHoichoiOnly: true,
+                                                    descriptionSource: 'Hoichoi'
+                                                });
+                                            }
+                                        });
+                                        if (episodes.length > 0) {
+                                            log(`Successfully parsed ${episodes.length} episodes from JSON`);
+                                            return episodes;
+                                        }
+                                    }
+                                }
+                            } catch (e) {
+                                // Not valid JSON, continue
+                            }
+                        }
+                    }
+
+                    // Try parsing entire script as JSON
+                    try {
+                        const fullData = JSON.parse(scriptText);
+                        const searchForEpisodes = (obj, path = '') => {
+                            if (!obj || typeof obj !== 'object') return null;
+                            if (Array.isArray(obj) && obj.length > 0 && obj[0] && (obj[0].episodeNumber || obj[0].episode_number || obj[0].number || obj[0].Episode)) {
+                                return obj;
+                            }
+                            for (const key in obj) {
+                                if (key.toLowerCase().includes('episode') && Array.isArray(obj[key]) && obj[key].length > 0) {
+                                    return obj[key];
+                                }
+                                if (typeof obj[key] === 'object' && obj[key] !== null) {
+                                    const found = searchForEpisodes(obj[key], path + '.' + key);
+                                    if (found) return found;
+                                }
+                            }
+                            return null;
+                        };
+                        const foundEpisodes = searchForEpisodes(fullData);
+                        if (foundEpisodes && foundEpisodes.length > 0) {
+                            log(`Found ${foundEpisodes.length} episodes in nested JSON structure`);
+                            foundEpisodes.forEach((ep, idx) => {
+                                episodes.push({
+                                    episodeNumber: ep.episodeNumber || ep.episode_number || ep.number || ep.Episode || (idx + 1),
+                                    name: ep.name || ep.title || ep.Title || `Episode ${ep.episodeNumber || ep.episode_number || ep.number || ep.Episode || (idx + 1)}`,
+                                    overview: ep.overview || ep.description || ep.plot || ep.Plot || '',
+                                    airDate: ep.airDate || ep.air_date || ep.released || ep.Released || '',
+                                    runtime: ep.runtime || ep.duration || 0,
+                                    isHoichoiOnly: true,
+                                    descriptionSource: 'Hoichoi'
+                                });
+                            });
+                            if (episodes.length > 0) {
+                                log(`Successfully parsed ${episodes.length} episodes from nested JSON`);
+                                return episodes;
+                            }
+                        }
+                    } catch (e) {
+                        // Not valid JSON, continue
+                    }
+                } catch (e) {
+                    log(`Error parsing script tag:`, e);
+                }
+            }
+        } catch (e) {
+            log(`Error in JSON extraction strategy:`, e);
+        }
+
+        // Strategy 2: Try multiple HTML selectors to find episode lists
         const episodeSelectors = [
             '[class*="episode"]',
             '[class*="Episode"]',
             '[data-episode]',
+            '[data-episode-number]',
             '[class*="card"]',
             '[class*="item"]',
             'a[href*="/episode"]',
-            'a[href*="/watch"]'
+            'a[href*="/watch"]',
+            '[class*="season"] [class*="episode"]',
+            '[class*="episode-list"]',
+            '[class*="episodes"]',
+            'li[class*="episode"]',
+            'div[class*="episode"]'
         ];
 
         let episodeElements = [];
@@ -3234,16 +3334,32 @@
             if (elements.length > 0) {
                 log(`Found ${elements.length} elements with selector: ${selector}`);
                 episodeElements = Array.from(elements);
-                break;
+                // Only break if we found a reasonable number (not too many false positives)
+                if (episodeElements.length > 0 && episodeElements.length < 100) {
+                    break;
+                }
             }
         }
 
-        // If no specific episode elements found, try to find numbered items
+        // Strategy 3: If no specific episode elements found, try to find numbered items
         if (episodeElements.length === 0) {
             // Look for elements with episode numbers in text or data attributes
             const allLinks = doc.querySelectorAll('a[href*="episode"], a[href*="watch"], [class*="episode"], [class*="Episode"]');
             episodeElements = Array.from(allLinks);
             log(`Found ${episodeElements.length} potential episode links`);
+        }
+
+        // Strategy 4: Look for numbered list items or divs that might be episodes
+        if (episodeElements.length === 0) {
+            // Look for patterns like "Episode 1", "Ep 1", "1.", etc.
+            const allElements = doc.querySelectorAll('div, li, a, span');
+            for (const el of allElements) {
+                const text = el.textContent || '';
+                if (text.match(/[Ee]pisode\s+\d+|Ep\s+\d+|\d+[\.\)]\s+[A-Z]/i) && text.length < 200) {
+                    episodeElements.push(el);
+                }
+            }
+            log(`Found ${episodeElements.length} elements with episode-like patterns`);
         }
 
         // Extract episode information
@@ -3324,6 +3440,81 @@
             }
         });
 
+        // If still no episodes found, try to extract from URL patterns or create placeholder episodes
+        if (episodes.length === 0) {
+            log('⚠️ No episodes found with standard methods. Trying fallback strategies...');
+            
+            // Strategy 5: Look for episode URLs in the HTML
+            const episodeUrlPattern = /\/episode[s]?\/?(\d+)|episode[_-]?(\d+)/gi;
+            const urlMatches = html.match(episodeUrlPattern);
+            if (urlMatches && urlMatches.length > 0) {
+                log(`Found ${urlMatches.length} episode URL patterns`);
+                const episodeNumbers = new Set();
+                urlMatches.forEach(match => {
+                    const numMatch = match.match(/\d+/);
+                    if (numMatch) {
+                        episodeNumbers.add(parseInt(numMatch[0]));
+                    }
+                });
+                Array.from(episodeNumbers).sort((a, b) => a - b).forEach(epNum => {
+                    episodes.push({
+                        episodeNumber: epNum,
+                        name: `Episode ${epNum}`,
+                        overview: '',
+                        airDate: '',
+                        runtime: 0,
+                        isHoichoiOnly: true,
+                        descriptionSource: 'Hoichoi'
+                    });
+                });
+            }
+
+            // Strategy 6: Look for numbered content sections that might be episodes
+            if (episodes.length === 0) {
+                const numberedSections = doc.querySelectorAll('[class*="1"], [class*="2"], [class*="3"], [id*="1"], [id*="2"], [id*="3"]');
+                log(`Found ${numberedSections.length} numbered sections`);
+                // This is a last resort - create episodes based on common patterns
+                // Look for repeated structures that might indicate episodes
+                const repeatedStructures = {};
+                numberedSections.forEach(el => {
+                    const classList = Array.from(el.classList || []);
+                    const id = el.id || '';
+                    const key = classList.join(' ') + id;
+                    if (!repeatedStructures[key]) {
+                        repeatedStructures[key] = [];
+                    }
+                    repeatedStructures[key].push(el);
+                });
+                
+                // Find the most common structure (likely episodes)
+                let maxCount = 0;
+                let episodeStructure = null;
+                for (const key in repeatedStructures) {
+                    if (repeatedStructures[key].length > maxCount && repeatedStructures[key].length >= 2) {
+                        maxCount = repeatedStructures[key].length;
+                        episodeStructure = repeatedStructures[key];
+                    }
+                }
+                
+                if (episodeStructure && episodeStructure.length >= 2 && episodeStructure.length <= 50) {
+                    log(`Found ${episodeStructure.length} repeated structures, treating as episodes`);
+                    episodeStructure.forEach((el, idx) => {
+                        const titleEl = el.querySelector('h1, h2, h3, h4, h5, h6, [class*="title"], [class*="name"]') || el;
+                        const title = titleEl.textContent.trim() || `Episode ${idx + 1}`;
+                        episodes.push({
+                            episodeNumber: idx + 1,
+                            name: title,
+                            overview: '',
+                            airDate: '',
+                            runtime: 0,
+                            isHoichoiOnly: true,
+                            descriptionSource: 'Hoichoi'
+                        });
+                    });
+                }
+            }
+        }
+
         // Sort episodes by episode number
         episodes.sort((a, b) => a.episodeNumber - b.episodeNumber);
 
@@ -3338,6 +3529,18 @@
         });
 
         log(`Parsed ${uniqueEpisodes.length} unique episodes from Hoichoi`);
+        
+        // Debug: Log HTML structure if no episodes found
+        if (uniqueEpisodes.length === 0) {
+            log('⚠️ DEBUG: No episodes found. HTML structure analysis:');
+            log(`- Total script tags: ${doc.querySelectorAll('script').length}`);
+            log(`- Total links: ${doc.querySelectorAll('a').length}`);
+            log(`- Total divs: ${doc.querySelectorAll('div').length}`);
+            log(`- Page title: ${doc.querySelector('title')?.textContent || 'N/A'}`);
+            // Log a sample of the HTML for debugging (first 2000 chars)
+            log(`- HTML sample: ${html.substring(0, 2000)}`);
+        }
+        
         return uniqueEpisodes;
     }
 
@@ -5126,7 +5329,7 @@
     
     window.tvdbHelperTest = function() {
         console.log('🧪 TVDB Helper Test Function');
-        console.log('Script version: 1.6.8');
+        console.log('Script version: 1.6.9');
         console.log('Current step:', getCurrentStep());
         console.log('Document ready:', document.readyState);
         console.log('Body exists:', !!document.body);
