@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TVDB Workflow Helper - Complete
 // @namespace    tvdb.workflow
-// @version      1.7.6
+// @version      1.7.7
 // @description  Complete TVDB 5-step workflow helper with TMDB/OMDb/Hoichoi integration and flexible data source modes
 // @author       you
 // @match        https://thetvdb.com/series/create*
@@ -35,7 +35,7 @@
     'use strict';
 
     // Immediate console logs to verify script is running
-    console.log('🎬 TVDB Workflow Helper v1.7.6 - Script file loaded');
+    console.log('🎬 TVDB Workflow Helper v1.7.7 - Script file loaded');
     console.log('📍 Current URL:', window.location.href);
     console.log('📍 Current pathname:', window.location.pathname);
     console.log('📋 Complete 5-step TVDB submission automation');
@@ -854,15 +854,19 @@
                         <div style="margin-bottom: 15px;">
                             <label style="display: block; margin-bottom: 5px; color: #ccc;">Paste Episode Data (JSON or Text):</label>
                             <textarea id="tvdb-manual-episode-data" placeholder='Paste episode data here. Examples:
+
+CSV format (from Gemini/AI):
+Episode Number,Title (Original),Runtime,Summary/Description
+S1 E1,Kiraaye Ka Kissa - Hindi,9m,Shreya is muddled about...
+S1 E2,Online Shaadi - Hindi,9m,When her parents...
+
 JSON format:
 [
-  {"episodeNumber": 1, "name": "Kiraaye Ka Kissa - Hindi", "overview": "Shreya is muddled...", "runtime": 9},
-  {"episodeNumber": 2, "name": "Online Shaadi - Hindi", "overview": "When her parents...", "runtime": 9}
+  {"episodeNumber": 1, "name": "Kiraaye Ka Kissa - Hindi", "overview": "Shreya is muddled...", "runtime": 9}
 ]
 
-Or simple text format (one per line):
-1. Kiraaye Ka Kissa - Hindi | 9m | Shreya is muddled about the countless rules...
-2. Online Shaadi - Hindi | 9m | When her parents are going crazy...'
+Or simple text format:
+1. Kiraaye Ka Kissa - Hindi | 9m | Shreya is muddled...'
                                    style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: #333; color: white; min-height: 150px; font-family: monospace; font-size: 11px; margin-bottom: 5px;"></textarea>
                             <div style="font-size: 10px; color: #999; margin-bottom: 10px;">
                                 💡 Tip: Take a screenshot of Hoichoi episodes, extract data with Gemini/AI, and paste here
@@ -2253,10 +2257,96 @@ Or simple text format (one per line):
                 // Not JSON, try text parsing
                 log(`Not JSON format, trying text parsing...`);
                 
-                // Try parsing text format like:
-                // 1. Title | 9m | Description
-                // 2. Title | 9m | Description
+                // Try CSV format first (from Gemini/AI extraction)
+                // Format: "S1 E1,Title - Hindi,9m,Description"
                 const lines = manualData.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+                
+                // Check if first line looks like CSV header
+                const isCSV = lines[0] && (
+                    lines[0].includes('Episode Number') || 
+                    lines[0].includes('Title') || 
+                    lines[0].includes('Runtime') ||
+                    lines[0].includes(',')
+                );
+                
+                if (isCSV && lines.length > 1) {
+                    log(`Detected CSV format, parsing...`);
+                    // Skip header row
+                    for (let i = 1; i < lines.length; i++) {
+                        const line = lines[i];
+                        // Parse CSV line: "S1 E1,Title - Hindi,9m,Description"
+                        // Handle quoted fields that may contain commas
+                        const csvFields = [];
+                        let currentField = '';
+                        let inQuotes = false;
+                        
+                        for (let j = 0; j < line.length; j++) {
+                            const char = line[j];
+                            if (char === '"') {
+                                inQuotes = !inQuotes;
+                            } else if (char === ',' && !inQuotes) {
+                                csvFields.push(currentField.trim());
+                                currentField = '';
+                            } else {
+                                currentField += char;
+                            }
+                        }
+                        csvFields.push(currentField.trim()); // Add last field
+                        
+                        if (csvFields.length >= 2) {
+                            // Extract episode number from "S1 E1" format
+                            let episodeNumber = 1;
+                            const epNumMatch = csvFields[0].match(/S\d+\s*E(\d+)|S\d+E(\d+)|[Ee]pisode\s*(\d+)|Ep\s*(\d+)|(\d+)/i);
+                            if (epNumMatch) {
+                                episodeNumber = parseInt(epNumMatch[1] || epNumMatch[2] || epNumMatch[3] || epNumMatch[4] || epNumMatch[5]);
+                            }
+                            
+                            // Extract title (remove language suffix)
+                            let title = csvFields[1] || '';
+                            title = title.replace(/\s*-\s*(Hindi|Bengali|English|Tamil|Telugu|Marathi|Gujarati|Punjabi|Kannada|Malayalam)$/i, '').trim();
+                            
+                            // Extract runtime (handle "9m" format)
+                            let runtime = 0;
+                            if (csvFields.length >= 3 && csvFields[2]) {
+                                const runtimeMatch = csvFields[2].match(/(\d+)\s*m/i);
+                                if (runtimeMatch) {
+                                    runtime = parseInt(runtimeMatch[1]);
+                                }
+                            }
+                            
+                            // Extract description
+                            let overview = '';
+                            if (csvFields.length >= 4) {
+                                overview = csvFields[3] || '';
+                            } else if (csvFields.length >= 3 && !csvFields[2].match(/\d+m/i)) {
+                                // If field 3 doesn't look like runtime, it might be description
+                                overview = csvFields[2] || '';
+                            }
+                            
+                            episodes.push({
+                                episodeNumber: episodeNumber,
+                                name: title || `Episode ${episodeNumber}`,
+                                overview: overview,
+                                airDate: '',
+                                runtime: runtime,
+                                isHoichoiOnly: true,
+                                descriptionSource: 'Manual'
+                            });
+                            
+                            log(`✅ Parsed CSV Episode ${episodeNumber}: "${title}" (${runtime}m)`);
+                        }
+                    }
+                    
+                    if (episodes.length > 0) {
+                        log(`✅ Successfully parsed ${episodes.length} episodes from CSV format`);
+                    }
+                }
+                
+                // If CSV parsing didn't work, try other text formats
+                if (episodes.length === 0) {
+                    // Try parsing text format like:
+                    // 1. Title | 9m | Description
+                    // 2. Title | 9m | Description
                 
                 for (const line of lines) {
                     // Try pattern: "1. Title - Hindi | 9m | Description"
@@ -6222,7 +6312,7 @@ Or simple text format (one per line):
     
     window.tvdbHelperTest = function() {
         console.log('🧪 TVDB Helper Test Function');
-        console.log('Script version: 1.7.6');
+        console.log('Script version: 1.7.7');
         console.log('Current step:', getCurrentStep());
         console.log('Document ready:', document.readyState);
         console.log('Body exists:', !!document.body);
