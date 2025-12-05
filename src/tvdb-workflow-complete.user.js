@@ -4527,7 +4527,7 @@
     
     window.tvdbHelperTest = function() {
         console.log('🧪 TVDB Helper Test Function');
-        console.log('Script version: 1.6.0');
+        console.log('Script version: 1.6.2');
         console.log('Current step:', getCurrentStep());
         console.log('Document ready:', document.readyState);
         console.log('Body exists:', !!document.body);
