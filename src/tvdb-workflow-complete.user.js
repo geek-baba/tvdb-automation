@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TVDB Workflow Helper - Complete
 // @namespace    tvdb.workflow
-// @version      1.6.5
+// @version      1.6.6
 // @description  Complete TVDB 5-step workflow helper with TMDB/OMDb/Hoichoi integration and flexible data source modes
 // @author       you
 // @match        https://thetvdb.com/series/create*
@@ -29,7 +29,7 @@
     'use strict';
 
     // Immediate console logs to verify script is running
-    console.log('🎬 TVDB Workflow Helper v1.6.5 - Script file loaded');
+    console.log('🎬 TVDB Workflow Helper v1.6.6 - Script file loaded');
     console.log('📍 Current URL:', window.location.href);
     console.log('📍 Current pathname:', window.location.pathname);
     console.log('📋 Complete 5-step TVDB submission automation');
@@ -910,10 +910,25 @@
 
                     <div style="margin-bottom: 15px;">
                         <label style="display: block; margin-bottom: 5px; color: #ccc;">Translation Data:</label>
-                        <div style="background: #222; padding: 8px; border-radius: 4px; font-size: 12px; color: #ccc;">
-                            ${context.tmdbId ? `TMDB ID: ${context.tmdbId}` : 'No TMDB ID available'}
-                            ${context.imdbId ? `<br>IMDb ID: ${context.imdbId}` : ''}
-                            ${context.originalIso1 !== 'en' ? `<br>Translating from ${context.originalIso1} to English` : '<br>No translation needed (already English)'}
+                        <div id="tvdb-translation-data" style="background: #222; padding: 8px; border-radius: 4px; font-size: 12px; color: #ccc;">
+                            ${(() => {
+                                // Check if Hoichoi data is available
+                                const hasHoichoiData = window.tvdbFetchedData && window.tvdbFetchedData.tmdb && window.tvdbFetchedData.tmdb.isHoichoiOnly;
+                                const hoichoiUrl = window.tvdbFetchedData?.officialSite || '';
+                                
+                                if (hasHoichoiData && hoichoiUrl) {
+                                    return `Hoichoi URL: <a href="${hoichoiUrl}" target="_blank" style="color: #9C27B0;">${hoichoiUrl}</a><br>Source: Hoichoi (${context.originalIso1 || 'hi'})<br>Translating from ${context.originalIso1 || 'hi'} to English`;
+                                } else {
+                                    let html = context.tmdbId ? `TMDB ID: ${context.tmdbId}` : 'No TMDB ID available';
+                                    if (context.imdbId) html += `<br>IMDb ID: ${context.imdbId}`;
+                                    if (context.originalIso1 !== 'en') {
+                                        html += `<br>Translating from ${context.originalIso1} to English`;
+                                    } else {
+                                        html += '<br>No translation needed (already English)';
+                                    }
+                                    return html;
+                                }
+                            })()}
                         </div>
                     </div>
 
@@ -1157,7 +1172,11 @@
                         if (hoichoiNote) {
                             hoichoiNote.style.display = this.value === 'hoichoi' ? 'block' : 'none';
                         }
+                        // Update translation data display when source changes
+                        updateTranslationData();
                     };
+                    // Update translation data on initial load
+                    setTimeout(updateTranslationData, 100);
                 }
                 break;
         }
@@ -1198,6 +1217,29 @@
         const previewDiv = document.getElementById('tvdb-preview');
         if (previewDiv) {
             previewDiv.innerHTML = content;
+        }
+    }
+
+    // Update translation data display (for Step 5)
+    function updateTranslationData() {
+        const translationDataDiv = document.getElementById('tvdb-translation-data');
+        if (!translationDataDiv) return;
+
+        // Check if Hoichoi data is available
+        const hasHoichoiData = window.tvdbFetchedData && window.tvdbFetchedData.tmdb && window.tvdbFetchedData.tmdb.isHoichoiOnly;
+        const hoichoiUrl = window.tvdbFetchedData?.officialSite || '';
+        
+        if (hasHoichoiData && hoichoiUrl) {
+            translationDataDiv.innerHTML = `Hoichoi URL: <a href="${hoichoiUrl}" target="_blank" style="color: #9C27B0;">${hoichoiUrl}</a><br>Source: Hoichoi (${context.originalIso1 || 'hi'})<br>Translating from ${context.originalIso1 || 'hi'} to English`;
+        } else {
+            let html = context.tmdbId ? `TMDB ID: ${context.tmdbId}` : 'No TMDB ID available';
+            if (context.imdbId) html += `<br>IMDb ID: ${context.imdbId}`;
+            if (context.originalIso1 && context.originalIso1 !== 'en') {
+                html += `<br>Translating from ${context.originalIso1} to English`;
+            } else if (!context.originalIso1 || context.originalIso1 === 'en') {
+                html += '<br>No translation needed (already English)';
+            }
+            translationDataDiv.innerHTML = html;
         }
     }
 
@@ -4765,7 +4807,7 @@
     
     window.tvdbHelperTest = function() {
         console.log('🧪 TVDB Helper Test Function');
-        console.log('Script version: 1.6.5');
+        console.log('Script version: 1.6.6');
         console.log('Current step:', getCurrentStep());
         console.log('Document ready:', document.readyState);
         console.log('Body exists:', !!document.body);
