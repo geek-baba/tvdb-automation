@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TVDB Workflow Helper - Complete
 // @namespace    tvdb.workflow
-// @version      1.7.3
+// @version      1.7.4
 // @description  Complete TVDB 5-step workflow helper with TMDB/OMDb/Hoichoi integration and flexible data source modes
 // @author       you
 // @match        https://thetvdb.com/series/create*
@@ -29,7 +29,7 @@
     'use strict';
 
     // Immediate console logs to verify script is running
-    console.log('🎬 TVDB Workflow Helper v1.7.3 - Script file loaded');
+    console.log('🎬 TVDB Workflow Helper v1.7.4 - Script file loaded');
     console.log('📍 Current URL:', window.location.href);
     console.log('📍 Current pathname:', window.location.pathname);
     console.log('📋 Complete 5-step TVDB submission automation');
@@ -1844,60 +1844,83 @@
         log(`Starting Hoichoi episode fetch for URL: ${hoichoiUrl}, Season: ${seasonNum}`);
 
         try {
-            // Fetch Hoichoi page HTML
-            let html;
-            let gmRequest = null;
-            try {
-                if (typeof GM_xmlhttpRequest !== 'undefined' && GM_xmlhttpRequest) {
-                    gmRequest = GM_xmlhttpRequest;
-                } else if (typeof window !== 'undefined' && window.GM_xmlhttpRequest) {
-                    gmRequest = window.GM_xmlhttpRequest;
+            // Strategy: Open Hoichoi page in a hidden iframe or new window to let JavaScript render
+            // Then extract from the rendered DOM
+            log(`🔍 Attempting to extract episodes from rendered DOM...`);
+            
+            // First, try to extract from current page if we're already on Hoichoi
+            let episodes = [];
+            if (window.location.hostname.includes('hoichoi.tv')) {
+                log(`✅ Already on Hoichoi domain, extracting from current page DOM`);
+                episodes = extractEpisodesFromDOM(seasonNum);
+                if (episodes.length > 0) {
+                    log(`✅ Found ${episodes.length} episodes from current page DOM`);
                 }
-            } catch (e) {
-                log('Could not access GM_xmlhttpRequest:', e);
             }
+            
+            // If not found, try opening in iframe
+            if (episodes.length === 0) {
+                log(`🔍 Opening Hoichoi page in iframe to extract rendered content...`);
+                episodes = await extractEpisodesFromIframe(hoichoiUrl, seasonNum);
+            }
+            
+            // Fallback: Fetch HTML and parse (may not have rendered content)
+            if (episodes.length === 0) {
+                log(`⚠️ DOM extraction failed, falling back to HTML parsing...`);
+                
+                let html;
+                let gmRequest = null;
+                try {
+                    if (typeof GM_xmlhttpRequest !== 'undefined' && GM_xmlhttpRequest) {
+                        gmRequest = GM_xmlhttpRequest;
+                    } else if (typeof window !== 'undefined' && window.GM_xmlhttpRequest) {
+                        gmRequest = window.GM_xmlhttpRequest;
+                    }
+                } catch (e) {
+                    log('Could not access GM_xmlhttpRequest:', e);
+                }
 
-            if (gmRequest) {
-                html = await new Promise((resolve, reject) => {
-                    try {
-                        gmRequest({
-                            method: 'GET',
-                            url: hoichoiUrl,
-                            headers: {
-                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-                            },
-                            onload: function(response) {
-                                if (response.status >= 200 && response.status < 300) {
-                                    resolve(response.responseText);
-                                } else {
-                                    reject(new Error(`HTTP ${response.status}: ${response.statusText || 'Unknown error'}`));
-                                }
-                            },
-                            onerror: function(error) {
-                                reject(new Error(error.error || error.message || 'Network error'));
-                            },
-                            ontimeout: function() {
-                                reject(new Error('Request timeout'));
-                            },
-                            timeout: 30000
-                        });
-                    } catch (err) {
-                        reject(new Error(`GM_xmlhttpRequest setup failed: ${err.message || err}`));
+                if (gmRequest) {
+                    html = await new Promise((resolve, reject) => {
+                        try {
+                            gmRequest({
+                                method: 'GET',
+                                url: hoichoiUrl,
+                                headers: {
+                                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                                },
+                                onload: function(response) {
+                                    if (response.status >= 200 && response.status < 300) {
+                                        resolve(response.responseText);
+                                    } else {
+                                        reject(new Error(`HTTP ${response.status}: ${response.statusText || 'Unknown error'}`));
+                                    }
+                                },
+                                onerror: function(error) {
+                                    reject(new Error(error.error || error.message || 'Network error'));
+                                },
+                                ontimeout: function() {
+                                    reject(new Error('Request timeout'));
+                                },
+                                timeout: 30000
+                            });
+                        } catch (err) {
+                            reject(new Error(`GM_xmlhttpRequest setup failed: ${err.message || err}`));
+                        }
+                    });
+                } else {
+                    const response = await fetch(hoichoiUrl, {
+                        method: 'GET',
+                        mode: 'cors',
+                        headers: {
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                        }
+                    });
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                     }
-                });
-            } else {
-                const response = await fetch(hoichoiUrl, {
-                    method: 'GET',
-                    mode: 'cors',
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-                    }
-                });
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    html = await response.text();
                 }
-                html = await response.text();
-            }
 
             // Log HTML sample for debugging
             log(`📄 HTML fetched: ${html.length} characters`);
@@ -2100,8 +2123,9 @@
                 }
             }
             
-            // Parse episodes from HTML (fallback)
-            const episodes = parseHoichoiEpisodes(html, parseInt(seasonNum));
+                // Parse episodes from HTML (fallback)
+                episodes = parseHoichoiEpisodes(html, parseInt(seasonNum));
+            }
             
             log(`📊 Parsing result: ${episodes.length} episodes found`);
             if (episodes.length > 0) {
@@ -5848,7 +5872,7 @@
     
     window.tvdbHelperTest = function() {
         console.log('🧪 TVDB Helper Test Function');
-        console.log('Script version: 1.7.3');
+        console.log('Script version: 1.7.4');
         console.log('Current step:', getCurrentStep());
         console.log('Document ready:', document.readyState);
         console.log('Body exists:', !!document.body);
