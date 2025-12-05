@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TVDB Workflow Helper - Complete
 // @namespace    tvdb.workflow
-// @version      1.6.7
+// @version      1.6.8
 // @description  Complete TVDB 5-step workflow helper with TMDB/OMDb/Hoichoi integration and flexible data source modes
 // @author       you
 // @match        https://thetvdb.com/series/create*
@@ -29,7 +29,7 @@
     'use strict';
 
     // Immediate console logs to verify script is running
-    console.log('🎬 TVDB Workflow Helper v1.6.7 - Script file loaded');
+    console.log('🎬 TVDB Workflow Helper v1.6.8 - Script file loaded');
     console.log('📍 Current URL:', window.location.href);
     console.log('📍 Current pathname:', window.location.pathname);
     console.log('📋 Complete 5-step TVDB submission automation');
@@ -801,6 +801,7 @@
                         <select id="tvdb-episode-source" style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: #333; color: white; margin-bottom: 10px;">
                             <option value="tmdb">TMDB (Recommended)</option>
                             <option value="omdb">OMDb Only (IMDb ID)</option>
+                            <option value="hoichoi">Hoichoi (URL)</option>
                         </select>
                     </div>
 
@@ -826,6 +827,18 @@
                                    value="${context.imdbId}">
                             <div style="font-size: 10px; color: #999; margin-bottom: 10px;">
                                 ⚠️ OMDb episode data: titles and air dates only, limited descriptions
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="tvdb-hoichoi-episode-fields" style="display: none;">
+                        <div style="margin-bottom: 15px;">
+                            <label style="display: block; margin-bottom: 5px; color: #ccc;">Hoichoi Show URL:</label>
+                            <input type="text" id="tvdb-hoichoi-url-step3" placeholder="e.g., https://www.hoichoi.tv/shows/chill-dil-hoichoi-mini"
+                                   style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: #333; color: white; margin-bottom: 5px;"
+                                   value="${window.tvdbFetchedData?.officialSite || ''}">
+                            <div style="font-size: 10px; color: #999; margin-bottom: 10px;">
+                                ⚠️ Hoichoi episode data: scraped from show page, may have limited descriptions
                             </div>
                         </div>
                     </div>
@@ -1156,12 +1169,19 @@
                     episodeSourceSelect.onchange = function() {
                         const tmdbEpisodeFields = document.getElementById('tvdb-tmdb-episode-fields');
                         const omdbEpisodeFields = document.getElementById('tvdb-omdb-episode-fields');
+                        const hoichoiEpisodeFields = document.getElementById('tvdb-hoichoi-episode-fields');
                         if (this.value === 'omdb') {
                             if (tmdbEpisodeFields) tmdbEpisodeFields.style.display = 'none';
                             if (omdbEpisodeFields) omdbEpisodeFields.style.display = 'block';
+                            if (hoichoiEpisodeFields) hoichoiEpisodeFields.style.display = 'none';
+                        } else if (this.value === 'hoichoi') {
+                            if (tmdbEpisodeFields) tmdbEpisodeFields.style.display = 'none';
+                            if (omdbEpisodeFields) omdbEpisodeFields.style.display = 'none';
+                            if (hoichoiEpisodeFields) hoichoiEpisodeFields.style.display = 'block';
                         } else {
                             if (tmdbEpisodeFields) tmdbEpisodeFields.style.display = 'block';
                             if (omdbEpisodeFields) omdbEpisodeFields.style.display = 'none';
+                            if (hoichoiEpisodeFields) hoichoiEpisodeFields.style.display = 'none';
                         }
                     };
                 }
@@ -1633,6 +1653,9 @@
         if (episodeSource === 'omdb') {
             // OMDb-only mode
             await fetchEpisodesOmdbOnly();
+        } else if (episodeSource === 'hoichoi') {
+            // Hoichoi mode
+            await fetchEpisodesHoichoi();
         } else {
             // TMDB mode (original behavior)
             await fetchEpisodesTmdb();
@@ -1793,6 +1816,115 @@
         } catch (error) {
             updateStatus(`Error fetching OMDb episodes: ${error.message}`);
             log('Error fetching OMDb episodes:', error);
+        }
+    }
+
+    // Fetch episodes using Hoichoi (HTML scraping)
+    async function fetchEpisodesHoichoi() {
+        const seasonNum = document.getElementById('tvdb-season-num').value.trim();
+        const hoichoiUrl = document.getElementById('tvdb-hoichoi-url-step3').value.trim() || window.tvdbFetchedData?.officialSite || '';
+
+        if (!seasonNum) {
+            updateStatus('Please enter a season number');
+            return;
+        }
+
+        if (!hoichoiUrl) {
+            updateStatus('Please enter a Hoichoi show URL');
+            return;
+        }
+
+        // Validate URL format
+        if (!hoichoiUrl.includes('hoichoi.tv/shows/')) {
+            updateStatus('Invalid Hoichoi URL. Expected format: https://www.hoichoi.tv/shows/show-slug');
+            return;
+        }
+
+        updateStatus(`Fetching episodes from Hoichoi for Season ${seasonNum}...`);
+        log(`Starting Hoichoi episode fetch for URL: ${hoichoiUrl}, Season: ${seasonNum}`);
+
+        try {
+            // Fetch Hoichoi page HTML
+            let html;
+            let gmRequest = null;
+            try {
+                if (typeof GM_xmlhttpRequest !== 'undefined' && GM_xmlhttpRequest) {
+                    gmRequest = GM_xmlhttpRequest;
+                } else if (typeof window !== 'undefined' && window.GM_xmlhttpRequest) {
+                    gmRequest = window.GM_xmlhttpRequest;
+                }
+            } catch (e) {
+                log('Could not access GM_xmlhttpRequest:', e);
+            }
+
+            if (gmRequest) {
+                html = await new Promise((resolve, reject) => {
+                    try {
+                        gmRequest({
+                            method: 'GET',
+                            url: hoichoiUrl,
+                            headers: {
+                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                            },
+                            onload: function(response) {
+                                if (response.status >= 200 && response.status < 300) {
+                                    resolve(response.responseText);
+                                } else {
+                                    reject(new Error(`HTTP ${response.status}: ${response.statusText || 'Unknown error'}`));
+                                }
+                            },
+                            onerror: function(error) {
+                                reject(new Error(error.error || error.message || 'Network error'));
+                            },
+                            ontimeout: function() {
+                                reject(new Error('Request timeout'));
+                            },
+                            timeout: 30000
+                        });
+                    } catch (err) {
+                        reject(new Error(`GM_xmlhttpRequest setup failed: ${err.message || err}`));
+                    }
+                });
+            } else {
+                const response = await fetch(hoichoiUrl, {
+                    method: 'GET',
+                    mode: 'cors',
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                    }
+                });
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                html = await response.text();
+            }
+
+            // Parse episodes from HTML
+            const episodes = parseHoichoiEpisodes(html, parseInt(seasonNum));
+            
+            if (!episodes || episodes.length === 0) {
+                throw new Error('No episodes found on Hoichoi page for this season');
+            }
+
+            // Store episode data globally
+            window.tvdbEpisodeData = {
+                season: parseInt(seasonNum),
+                episodes: episodes,
+                tmdbId: '', // No TMDB ID in Hoichoi mode
+                imdbId: null,
+                isHoichoiOnly: true
+            };
+
+            // Generate preview
+            const preview = generateStep3Preview(episodes);
+            updatePreview(preview);
+
+            updateStatus(`Fetched ${episodes.length} episodes from Hoichoi for Season ${seasonNum}! Click Fill to populate the form.`);
+            log(`Hoichoi episode fetch completed successfully. Found ${episodes.length} episodes`);
+
+        } catch (error) {
+            updateStatus(`Error fetching Hoichoi episodes: ${error.message}`);
+            log('Error fetching Hoichoi episodes:', error);
         }
     }
 
@@ -3074,6 +3206,139 @@
             posterUrl: posterUrl,
             url: url
         };
+    }
+
+    // Parse episodes from Hoichoi page HTML
+    function parseHoichoiEpisodes(html, seasonNum) {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        const episodes = [];
+
+        log(`Parsing Hoichoi episodes for season ${seasonNum}`);
+
+        // Try multiple selectors to find episode lists
+        // Hoichoi typically has episodes in cards or lists
+        const episodeSelectors = [
+            '[class*="episode"]',
+            '[class*="Episode"]',
+            '[data-episode]',
+            '[class*="card"]',
+            '[class*="item"]',
+            'a[href*="/episode"]',
+            'a[href*="/watch"]'
+        ];
+
+        let episodeElements = [];
+        for (const selector of episodeSelectors) {
+            const elements = doc.querySelectorAll(selector);
+            if (elements.length > 0) {
+                log(`Found ${elements.length} elements with selector: ${selector}`);
+                episodeElements = Array.from(elements);
+                break;
+            }
+        }
+
+        // If no specific episode elements found, try to find numbered items
+        if (episodeElements.length === 0) {
+            // Look for elements with episode numbers in text or data attributes
+            const allLinks = doc.querySelectorAll('a[href*="episode"], a[href*="watch"], [class*="episode"], [class*="Episode"]');
+            episodeElements = Array.from(allLinks);
+            log(`Found ${episodeElements.length} potential episode links`);
+        }
+
+        // Extract episode information
+        episodeElements.forEach((element, index) => {
+            try {
+                // Try to extract episode number from various sources
+                let episodeNumber = index + 1;
+                
+                // Check data attributes
+                const dataEp = element.getAttribute('data-episode') || element.getAttribute('data-episode-number');
+                if (dataEp) {
+                    const epNum = parseInt(dataEp);
+                    if (!isNaN(epNum)) episodeNumber = epNum;
+                }
+
+                // Check text content for episode numbers
+                const text = element.textContent || '';
+                const epMatch = text.match(/[Ee]pisode\s*(\d+)|Ep\s*(\d+)|(\d+)/);
+                if (epMatch) {
+                    const epNum = parseInt(epMatch[1] || epMatch[2] || epMatch[3]);
+                    if (!isNaN(epNum) && epNum > 0) episodeNumber = epNum;
+                }
+
+                // Extract episode title
+                let name = '';
+                const titleElement = element.querySelector('[class*="title"], [class*="name"], h3, h4, h5, h6') || element;
+                name = titleElement.textContent.trim();
+                
+                // Clean up title (remove episode number prefixes, etc.)
+                name = name.replace(/^[Ee]pisode\s*\d+[:\s-]*/i, '').trim();
+                name = name.replace(/^Ep\s*\d+[:\s-]*/i, '').trim();
+                if (!name) {
+                    name = `Episode ${episodeNumber}`;
+                }
+
+                // Extract description/overview
+                let overview = '';
+                const descElement = element.querySelector('[class*="description"], [class*="overview"], [class*="synopsis"], p');
+                if (descElement) {
+                    overview = descElement.textContent.trim();
+                }
+
+                // Extract air date (if available)
+                let airDate = '';
+                const dateElement = element.querySelector('[class*="date"], [class*="release"], time');
+                if (dateElement) {
+                    const dateText = dateElement.textContent || dateElement.getAttribute('datetime') || '';
+                    // Try to parse date
+                    const dateMatch = dateText.match(/(\d{4}[-/]\d{1,2}[-/]\d{1,2})|(\d{1,2}[-/]\d{1,2}[-/]\d{4})/);
+                    if (dateMatch) {
+                        airDate = dateMatch[0];
+                    }
+                }
+
+                // Extract runtime (if available)
+                let runtime = null;
+                const runtimeElement = element.querySelector('[class*="runtime"], [class*="duration"], [class*="time"]');
+                if (runtimeElement) {
+                    const runtimeText = runtimeElement.textContent || '';
+                    const runtimeMatch = runtimeText.match(/(\d+)\s*(?:min|minutes?|mins?)/i);
+                    if (runtimeMatch) {
+                        runtime = parseInt(runtimeMatch[1]);
+                    }
+                }
+
+                episodes.push({
+                    episodeNumber: episodeNumber,
+                    name: name,
+                    overview: overview,
+                    airDate: airDate,
+                    runtime: runtime || 0,
+                    isHoichoiOnly: true,
+                    descriptionSource: 'Hoichoi'
+                });
+
+            } catch (error) {
+                log(`Error parsing episode element ${index}:`, error);
+            }
+        });
+
+        // Sort episodes by episode number
+        episodes.sort((a, b) => a.episodeNumber - b.episodeNumber);
+
+        // Remove duplicates (same episode number)
+        const uniqueEpisodes = [];
+        const seenNumbers = new Set();
+        episodes.forEach(ep => {
+            if (!seenNumbers.has(ep.episodeNumber)) {
+                seenNumbers.add(ep.episodeNumber);
+                uniqueEpisodes.push(ep);
+            }
+        });
+
+        log(`Parsed ${uniqueEpisodes.length} unique episodes from Hoichoi`);
+        return uniqueEpisodes;
     }
 
     // Convert Hoichoi scraped data to TMDB-compatible format
@@ -4861,7 +5126,7 @@
     
     window.tvdbHelperTest = function() {
         console.log('🧪 TVDB Helper Test Function');
-        console.log('Script version: 1.6.7');
+        console.log('Script version: 1.6.8');
         console.log('Current step:', getCurrentStep());
         console.log('Document ready:', document.readyState);
         console.log('Body exists:', !!document.body);
