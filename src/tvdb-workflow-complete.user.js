@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TVDB Workflow Helper - Complete
 // @namespace    tvdb.workflow
-// @version      1.8.1
+// @version      1.8.2
 // @description  Complete TVDB 5-step workflow helper with TMDB/OMDb/Hoichoi integration and flexible data source modes
 // @author       you
 // @match        https://thetvdb.com/series/create*
@@ -5085,17 +5085,42 @@ Or simple text format:
         const rtList = eps.map(e => e.runtime).filter(n => typeof n === 'number' && n > 0);
         const seasonAvg = rtList.length ? Math.round(rtList.reduce((a, b) => a + b, 0) / rtList.length) : 0;
 
-        await ensureRows(eps.length);
-        const rows = gatherRows();
-        const count = Math.min(25, Math.min(rows.length, eps.length));
+        const count = Math.min(25, eps.length);
+        log(`📊 Preparing to fill ${count} episodes...`);
 
-        log(`Filling ${count} episodes into ${rows.length} rows...`);
-
-        // Strategy: Fill episode numbers first, then match and fill details
-        // This prevents overwriting when DOM order doesn't match episode order
+        // CRITICAL: Ensure ALL rows are created BEFORE we start filling
+        log(`📊 Creating ${count} form rows...`);
+        await ensureRows(count);
         
-        // Step 1: Fill episode numbers sequentially into rows
-        for (let i = 0; i < count && i < rows.length; i++) {
+        // Wait a bit for all rows to be fully rendered
+        await sleep(200);
+        
+        // Verify we have enough rows
+        let rows = gatherRows();
+        let attempts = 0;
+        while (rows.length < count && attempts < 10) {
+            log(`📊 Only ${rows.length} rows found, need ${count}. Creating more...`);
+            await ensureRows(count);
+            await sleep(200);
+            rows = gatherRows();
+            attempts++;
+        }
+        
+        if (rows.length < count) {
+            log(`⚠️ Warning: Only ${rows.length} rows available, but need ${count} episodes`);
+        }
+        
+        log(`📊 Found ${rows.length} rows. Starting to fill ${count} episodes...`);
+
+        // Strategy: Fill episode numbers in REVERSE order to avoid overwriting
+        // Then match and fill details by episode number
+        
+        // Step 1: Fill episode numbers in reverse order (last episode first)
+        // This prevents early episodes from being overwritten
+        log(`📊 Step 1: Filling episode numbers in reverse order...`);
+        for (let i = count - 1; i >= 0; i--) {
+            if (i >= rows.length) continue;
+            
             const row = rows[i];
             const ep = eps[i];
             if (!row || !ep) continue;
@@ -5105,27 +5130,33 @@ Or simple text format:
                 numEl.value = String(ep.episode_number);
                 fire(numEl, 'input');
                 fire(numEl, 'change');
+                log(`📊 Set episode # ${ep.episode_number} in row ${i}`);
             }
-            await sleep(50); // Small delay between number fills
+            await sleep(100); // Longer delay to ensure form updates
         }
         
-        // Wait for form to update after filling episode numbers
-        await sleep(300);
+        // Wait for form to fully update after filling all episode numbers
+        log(`📊 Waiting for form to update...`);
+        await sleep(500);
         
-        // Step 2: Re-gather rows (order might have changed) and match episodes by number
+        // Step 2: Re-gather rows and match episodes by number, then fill details
         const updatedRows = gatherRows();
-        log(`Re-gathered ${updatedRows.length} rows after filling episode numbers`);
+        log(`📊 Step 2: Re-gathered ${updatedRows.length} rows. Matching episodes by number...`);
         
+        let filledCount = 0;
         for (let i = 0; i < count; i++) {
             const ep = eps[i];
             if (!ep) continue;
             
             // Find the row that has this episode number
             let targetRow = null;
-            for (const row of updatedRows) {
+            let targetRowIndex = -1;
+            for (let r = 0; r < updatedRows.length; r++) {
+                const row = updatedRows[r];
                 const numEl = inputByLabelWithin(row, 'Episode #');
                 if (numEl && numEl.value && parseInt(numEl.value) === ep.episode_number) {
                     targetRow = row;
+                    targetRowIndex = r;
                     break;
                 }
             }
@@ -5134,6 +5165,8 @@ Or simple text format:
                 log(`⚠️ Could not find row with episode number ${ep.episode_number}`);
                 continue;
             }
+            
+            log(`📊 Filling Episode ${ep.episode_number} "${ep.name}" into row ${targetRowIndex}`);
             
             // Fill the rest of the episode data
             fillRow(targetRow, {
@@ -5144,10 +5177,11 @@ Or simple text format:
                 runtime: ep.runtime || seasonAvg
             });
             
-            await sleep(50); // Small delay between fills
+            filledCount++;
+            await sleep(100); // Delay between fills
         }
         
-        log(`Episodes filled (TMDB). Review, tweak, submit.`);
+        log(`✅ Successfully filled ${filledCount} of ${count} episodes. Review, tweak, submit.`);
     }
 
     // EXACT copy from working script
