@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TVDB Workflow Helper - Complete
 // @namespace    tvdb.workflow
-// @version      1.9.2
+// @version      1.9.3
 // @description  Complete TVDB 5-step workflow helper with TMDB/OMDb/Hoichoi integration and flexible data source modes
 // @author       you
 // @match        https://thetvdb.com/series/create*
@@ -3188,20 +3188,31 @@
             return !panel; // Only process textareas NOT in the UI panel
         });
         
+        log(`gatherRows: Found ${tas.length} textareas (excluding UI panel)`);
+        
         const rows = [];
+        const seenRows = new Set(); // Track seen rows to avoid duplicates
         
         for (const ta of tas) {
             let p = ta;
             for (let i = 0; i < 6 && p; i++) {
                 const labels = Array.from(p.querySelectorAll('label'));
                 if (labels.some(l => /first aired/i.test(l.textContent || ''))) {
-                    rows.push(p);
+                    // Only add if we haven't seen this row element before
+                    if (!seenRows.has(p)) {
+                        rows.push(p);
+                        seenRows.add(p);
+                        log(`gatherRows: Added row ${rows.length} (found via textarea)`);
+                    } else {
+                        log(`gatherRows: Skipped duplicate row (already seen)`);
+                    }
                     break;
                 }
                 p = p.parentElement;
             }
         }
         
+        log(`gatherRows: Returning ${rows.length} unique episode rows`);
         return rows;
     }
 
