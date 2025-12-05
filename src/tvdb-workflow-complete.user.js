@@ -1847,6 +1847,10 @@ Or simple text format:
 
             log(`Converted ${episodes.length} OMDb episodes to standard format`);
 
+            // Sort episodes by episode number to ensure correct order
+            episodes.sort((a, b) => (a.episodeNumber || 0) - (b.episodeNumber || 0));
+            log(`✅ Sorted ${episodes.length} episodes by episode number`);
+            
             // Store episode data globally
             window.tvdbEpisodeData = {
                 season: parseInt(seasonNum),
