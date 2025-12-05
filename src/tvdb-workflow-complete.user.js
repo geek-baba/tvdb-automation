@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TVDB Workflow Helper - Complete
 // @namespace    tvdb.workflow
-// @version      1.6.2
+// @version      1.6.3
 // @description  Complete TVDB 5-step workflow helper with TMDB/OMDb/Hoichoi integration and flexible data source modes
 // @author       you
 // @match        https://thetvdb.com/series/create*
@@ -29,7 +29,7 @@
     'use strict';
 
     // Immediate console logs to verify script is running
-    console.log('🎬 TVDB Workflow Helper v1.6.2 - Script file loaded');
+    console.log('🎬 TVDB Workflow Helper v1.6.3 - Script file loaded');
     console.log('📍 Current URL:', window.location.href);
     console.log('📍 Current pathname:', window.location.pathname);
     console.log('📋 Complete 5-step TVDB submission automation');
@@ -698,6 +698,7 @@
                         <select id="tvdb-data-source-step2" style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: #333; color: white; margin-bottom: 10px;">
                             <option value="tmdb">TMDB (Recommended)</option>
                             <option value="omdb">OMDb Only (IMDb ID)</option>
+                            <option value="hoichoi">Hoichoi (URL)</option>
                         </select>
                     </div>
 
@@ -715,6 +716,16 @@
                                value="${context.imdbId}">
                         <div style="font-size: 10px; color: #999; margin-bottom: 10px;">
                             ⚠️ OMDb-only mode: Limited data available
+                        </div>
+                    </div>
+
+                    <div id="tvdb-hoichoi-fields-step2" style="margin-bottom: 15px; display: none;">
+                        <label style="display: block; margin-bottom: 5px; color: #ccc;">Hoichoi Show URL:</label>
+                        <input type="text" id="tvdb-hoichoi-url-step2" placeholder="e.g., https://www.hoichoi.tv/shows/chill-dil-hoichoi-mini"
+                               style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: #333; color: white; margin-bottom: 5px;"
+                               value="">
+                        <div style="font-size: 10px; color: #999; margin-bottom: 10px;">
+                            ⚠️ Hoichoi mode: Official site will be set to this URL
                         </div>
                     </div>
 
@@ -1067,12 +1078,19 @@
                     dataSourceSelectStep2.onchange = function() {
                         const tmdbFieldsStep2 = document.getElementById('tvdb-tmdb-fields-step2');
                         const omdbFieldsStep2 = document.getElementById('tvdb-omdb-fields-step2');
+                        const hoichoiFieldsStep2 = document.getElementById('tvdb-hoichoi-fields-step2');
                         if (this.value === 'omdb') {
                             if (tmdbFieldsStep2) tmdbFieldsStep2.style.display = 'none';
                             if (omdbFieldsStep2) omdbFieldsStep2.style.display = 'block';
+                            if (hoichoiFieldsStep2) hoichoiFieldsStep2.style.display = 'none';
+                        } else if (this.value === 'hoichoi') {
+                            if (tmdbFieldsStep2) tmdbFieldsStep2.style.display = 'none';
+                            if (omdbFieldsStep2) omdbFieldsStep2.style.display = 'none';
+                            if (hoichoiFieldsStep2) hoichoiFieldsStep2.style.display = 'block';
                         } else {
                             if (tmdbFieldsStep2) tmdbFieldsStep2.style.display = 'block';
                             if (omdbFieldsStep2) omdbFieldsStep2.style.display = 'none';
+                            if (hoichoiFieldsStep2) hoichoiFieldsStep2.style.display = 'none';
                         }
                     };
                 }
@@ -1154,6 +1172,9 @@
         if (dataSource === 'omdb') {
             // OMDb-only mode
             await fetchDataStep2OmdbOnly();
+        } else if (dataSource === 'hoichoi') {
+            // Hoichoi mode
+            await fetchDataStep2Hoichoi();
         } else {
             // TMDB mode (original behavior)
             await fetchDataStep2Tmdb();
@@ -1308,6 +1329,71 @@
         } catch (error) {
             updateStatus(`Error fetching OMDb data: ${error.message}`);
             log('Error fetching OMDb data:', error);
+        }
+    }
+
+    // Fetch data for step 2 using Hoichoi (HTML scraping)
+    async function fetchDataStep2Hoichoi() {
+        const hoichoiUrl = document.getElementById('tvdb-hoichoi-url-step2').value.trim();
+
+        if (!hoichoiUrl) {
+            updateStatus('Please enter a Hoichoi show URL');
+            return;
+        }
+
+        // Validate URL format
+        if (!hoichoiUrl.includes('hoichoi.tv/shows/')) {
+            updateStatus('Invalid Hoichoi URL. Expected format: https://www.hoichoi.tv/shows/show-slug');
+            return;
+        }
+
+        updateStatus('Fetching data from Hoichoi...');
+        log('Starting Hoichoi fetch for Step 2, URL:', hoichoiUrl);
+
+        try {
+            // Fetch and scrape Hoichoi show
+            const tvdbData = await fetchHoichoiShow(hoichoiUrl);
+
+            // Create simplified data for compatibility
+            const omdbData = null; // No OMDb data for Hoichoi
+
+            // Update context
+            context.tmdbId = ''; // No TMDB ID in Hoichoi mode
+            context.imdbId = null; // No IMDb ID
+            context.originalIso1 = tvdbData.originalLanguage;
+
+            // Store fetched data
+            window.tvdbFetchedData = {
+                tmdb: tvdbData,
+                omdb: omdbData,
+                imdbId: null,
+                tmdbId: '', // No TMDB ID
+                officialSite: hoichoiUrl, // Use Hoichoi URL as official site
+                isHoichoiOnly: true
+            };
+
+            // Generate preview
+            const preview = generateStep2Preview(tvdbData, omdbData);
+            updatePreview(preview);
+
+            // Update status
+            updateStatus(`Hoichoi data fetched successfully! Official site set to: ${hoichoiUrl}`);
+
+            log('Hoichoi fetch completed for Step 2', window.tvdbFetchedData);
+
+        } catch (error) {
+            const errorMsg = error.message || error.toString() || 'Unknown error';
+            log('Error fetching Hoichoi data for Step 2:', error);
+            log('Error stack:', error.stack);
+            log('Error details:', JSON.stringify(error));
+            
+            // Provide more helpful error message
+            let userFriendlyMsg = `Error fetching Hoichoi data: ${errorMsg}`;
+            if (errorMsg.includes('Failed to fetch') || errorMsg.includes('CORS')) {
+                userFriendlyMsg += '\n\nPossible solutions:\n1. Check Tampermonkey permissions for hoichoi.tv\n2. Make sure @connect www.hoichoi.tv is in script header\n3. Try refreshing the page';
+            }
+            
+            updateStatus(userFriendlyMsg);
         }
     }
 
@@ -4527,7 +4613,7 @@
     
     window.tvdbHelperTest = function() {
         console.log('🧪 TVDB Helper Test Function');
-        console.log('Script version: 1.6.2');
+        console.log('Script version: 1.6.3');
         console.log('Current step:', getCurrentStep());
         console.log('Document ready:', document.readyState);
         console.log('Body exists:', !!document.body);
