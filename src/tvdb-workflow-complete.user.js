@@ -499,82 +499,83 @@
 
             const currentStep = getCurrentStep();
 
-        // Create main container
-        const container = document.createElement('div');
-        container.id = 'tvdb-helper-ui';
-        container.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            width: 320px;
-            max-height: 85vh;
-            background: #1a1a1a;
-            color: #e0e0e0;
-            border: 1px solid #333;
-            border-radius: 6px;
-            padding: 12px;
-            z-index: 99999;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            font-size: 13px;
-            overflow-y: auto;
-            overflow-x: hidden;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
-            scrollbar-width: thin;
-            scrollbar-color: #555 #333;
-        `;
-        
-        // Add webkit scrollbar styles
-        const style = document.createElement('style');
-        style.textContent = `
-            #tvdb-helper-ui::-webkit-scrollbar {
-                width: 8px;
-            }
-            #tvdb-helper-ui::-webkit-scrollbar-track {
-                background: #333;
-                border-radius: 4px;
-            }
-            #tvdb-helper-ui::-webkit-scrollbar-thumb {
-                background: #4CAF50;
-                border-radius: 4px;
-            }
-            #tvdb-helper-ui::-webkit-scrollbar-thumb:hover {
-                background: #45a049;
-            }
-        `;
-        document.head.appendChild(style);
+            // Create main container
+            const container = document.createElement('div');
+            container.id = 'tvdb-helper-ui';
+            container.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                width: 320px;
+                max-height: 85vh;
+                background: #1a1a1a;
+                color: #e0e0e0;
+                border: 1px solid #333;
+                border-radius: 6px;
+                padding: 12px;
+                z-index: 99999;
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                font-size: 13px;
+                overflow-y: auto;
+                overflow-x: hidden;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+                scrollbar-width: thin;
+                scrollbar-color: #555 #333;
+            `;
+            
+            // Add webkit scrollbar styles
+            const style = document.createElement('style');
+            style.textContent = `
+                #tvdb-helper-ui::-webkit-scrollbar {
+                    width: 8px;
+                }
+                #tvdb-helper-ui::-webkit-scrollbar-track {
+                    background: #333;
+                    border-radius: 4px;
+                }
+                #tvdb-helper-ui::-webkit-scrollbar-thumb {
+                    background: #4CAF50;
+                    border-radius: 4px;
+                }
+                #tvdb-helper-ui::-webkit-scrollbar-thumb:hover {
+                    background: #45a049;
+                }
+            `;
+            document.head.appendChild(style);
 
-        try {
-            container.innerHTML = generateUIHTML(currentStep);
-        } catch (error) {
-            console.error('Error generating UI HTML:', error);
-            container.innerHTML = '<div style="padding: 20px; color: red;">Error generating UI. Check console for details.</div>';
-        }
-        
-        // Ensure body exists before appending
-        if (!document.body) {
-            log('⚠️ document.body not ready, waiting...');
-            setTimeout(() => {
-                try {
-                    if (document.body) {
-                        document.body.appendChild(container);
-                        setupEventListeners();
-                        log('UI created successfully for step:', currentStep);
-                    } else {
-                        log('❌ document.body still not available');
+            try {
+                container.innerHTML = generateUIHTML(currentStep);
+            } catch (error) {
+                console.error('Error generating UI HTML:', error);
+                container.innerHTML = '<div style="padding: 20px; color: red;">Error generating UI. Check console for details.</div>';
+            }
+            
+            // Ensure body exists before appending
+            if (!document.body) {
+                log('⚠️ document.body not ready, waiting...');
+                setTimeout(() => {
+                    try {
+                        if (document.body) {
+                            document.body.appendChild(container);
+                            setupEventListeners();
+                            log('UI created successfully for step:', currentStep);
+                        } else {
+                            log('❌ document.body still not available');
+                        }
+                    } catch (error) {
+                        console.error('Error appending UI to body:', error);
                     }
+                }, 200);
+            } else {
+                try {
+                    document.body.appendChild(container);
+                    // Add event listeners
+                    setupEventListeners();
+                    log('UI created successfully for step:', currentStep);
                 } catch (error) {
                     console.error('Error appending UI to body:', error);
+                    log('❌ Failed to append UI to body: ' + error.message);
                 }
-            }, 200);
-        } else {
-            try {
-                document.body.appendChild(container);
-                // Add event listeners
-                setupEventListeners();
-                log('UI created successfully for step:', currentStep);
-            } catch (error) {
-                console.error('Error appending UI to body:', error);
-                log('❌ Failed to append UI to body: ' + error.message);
             }
         } catch (error) {
             console.error('Error in createUI:', error);
