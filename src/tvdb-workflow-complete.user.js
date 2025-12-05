@@ -3448,6 +3448,165 @@
         };
     }
 
+    // Extract episodes directly from rendered DOM (most reliable for client-side rendered content)
+    function extractEpisodesFromDOM(seasonNum) {
+        const episodes = [];
+        log(`🔍 Extracting episodes from current page DOM...`);
+        
+        // Look for episode cards/elements in the rendered page
+        const episodeSelectors = [
+            '[class*="episode-card"]',
+            '[class*="EpisodeCard"]',
+            '[class*="episode-item"]',
+            '[class*="EpisodeItem"]',
+            '[data-episode]',
+            '[class*="card"][class*="episode"]',
+            'a[href*="/episode"]',
+            'a[href*="/watch"]',
+            '[class*="episode"]'
+        ];
+        
+        let episodeElements = [];
+        for (const selector of episodeSelectors) {
+            const elements = document.querySelectorAll(selector);
+            if (elements.length > 0 && elements.length < 100) {
+                log(`✅ Found ${elements.length} elements with selector: ${selector}`);
+                episodeElements = Array.from(elements);
+                break;
+            }
+        }
+        
+        // Extract episode data from each element
+        episodeElements.forEach((element, index) => {
+            try {
+                const text = element.textContent || '';
+                
+                // Extract episode number from "S1 E1" format
+                let episodeNumber = index + 1;
+                const s1e1Match = text.match(/S\d+\s*E(\d+)|S\d+E(\d+)/i);
+                if (s1e1Match) {
+                    episodeNumber = parseInt(s1e1Match[1] || s1e1Match[2]);
+                } else {
+                    const epMatch = text.match(/[Ee]pisode\s*(\d+)|Ep\s*(\d+)|E\s*(\d+)/);
+                    if (epMatch) {
+                        episodeNumber = parseInt(epMatch[1] || epMatch[2] || epMatch[3]);
+                    }
+                }
+                
+                // Extract title
+                let name = '';
+                const titleSelectors = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', '[class*="title"]', '[class*="name"]'];
+                for (const sel of titleSelectors) {
+                    const titleEl = element.querySelector(sel);
+                    if (titleEl) {
+                        name = titleEl.textContent.trim();
+                        name = name.replace(/\s*-\s*(Hindi|Bengali|English|Tamil|Telugu)$/i, '');
+                        name = name.replace(/^S\d+\s*E\d+[:\s-]*/i, '');
+                        name = name.replace(/^[Ee]pisode\s*\d+[:\s-]*/i, '');
+                        if (name.length > 2) break;
+                    }
+                }
+                
+                if (!name || name.length < 2) {
+                    const lines = text.split(/\n/).map(l => l.trim()).filter(l => l.length > 0);
+                    for (const line of lines) {
+                        if (!line.match(/^(S\d+\s*E\d+|Episode\s*\d+|Ep\s*\d+|E\d+|\d+m)$/i) && 
+                            line.length > 3 && line.length < 100) {
+                            name = line.replace(/\s*-\s*(Hindi|Bengali|English|Tamil|Telugu)$/i, '').trim();
+                            break;
+                        }
+                    }
+                }
+                
+                if (!name || name.length < 2) {
+                    name = `Episode ${episodeNumber}`;
+                }
+                
+                // Extract description
+                let overview = '';
+                const descSelectors = ['[class*="description"]', '[class*="overview"]', '[class*="synopsis"]', 'p'];
+                for (const sel of descSelectors) {
+                    const descEl = element.querySelector(sel);
+                    if (descEl) {
+                        const descText = descEl.textContent.trim();
+                        if (descText.length > 20 && descText.length < 500 && descText !== name) {
+                            overview = descText;
+                            break;
+                        }
+                    }
+                }
+                
+                // Extract runtime
+                let runtime = 0;
+                const runtimeMatch = text.match(/(\d+)\s*m\b/i);
+                if (runtimeMatch) {
+                    runtime = parseInt(runtimeMatch[1]);
+                }
+                
+                episodes.push({
+                    episodeNumber: episodeNumber,
+                    name: name,
+                    overview: overview,
+                    airDate: '',
+                    runtime: runtime,
+                    isHoichoiOnly: true,
+                    descriptionSource: 'Hoichoi'
+                });
+                
+                log(`✅ Extracted Episode ${episodeNumber}: "${name}" (${runtime}m)`);
+            } catch (error) {
+                log(`⚠️ Error extracting episode ${index}:`, error);
+            }
+        });
+        
+        return episodes;
+    }
+    
+    // Extract episodes from iframe (for cross-origin)
+    async function extractEpisodesFromIframe(url, seasonNum) {
+        return new Promise((resolve) => {
+            try {
+                const iframe = document.createElement('iframe');
+                iframe.style.display = 'none';
+                iframe.style.width = '0';
+                iframe.style.height = '0';
+                iframe.src = url;
+                document.body.appendChild(iframe);
+                
+                iframe.onload = function() {
+                    setTimeout(() => {
+                        try {
+                            const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
+                            if (iframeDoc) {
+                                const html = iframeDoc.documentElement.outerHTML;
+                                const episodes = parseHoichoiEpisodes(html, seasonNum);
+                                document.body.removeChild(iframe);
+                                resolve(episodes);
+                            } else {
+                                document.body.removeChild(iframe);
+                                resolve([]);
+                            }
+                        } catch (e) {
+                            log(`⚠️ Cannot access iframe content (CORS):`, e);
+                            document.body.removeChild(iframe);
+                            resolve([]);
+                        }
+                    }, 3000);
+                };
+                
+                setTimeout(() => {
+                    if (iframe.parentNode) {
+                        document.body.removeChild(iframe);
+                    }
+                    resolve([]);
+                }, 10000);
+            } catch (e) {
+                log(`⚠️ Error creating iframe:`, e);
+                resolve([]);
+            }
+        });
+    }
+
     // Parse episodes from Hoichoi page HTML
     function parseHoichoiEpisodes(html, seasonNum) {
         const parser = new DOMParser();
