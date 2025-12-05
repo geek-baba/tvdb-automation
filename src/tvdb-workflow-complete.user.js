@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TVDB Workflow Helper - Complete
 // @namespace    tvdb.workflow
-// @version      1.8.7
+// @version      1.8.8
 // @description  Complete TVDB 5-step workflow helper with TMDB/OMDb/Hoichoi integration and flexible data source modes
 // @author       you
 // @match        https://thetvdb.com/series/create*
@@ -5151,6 +5151,7 @@ Or simple text format:
     }
 
     // EXACT copy of working bulk fill logic
+    // EXACT copy from v1.5.0 - simple and working
     async function fillBulkTMDB(series, episodes, seasonNum) {
         if (!episodes || !Array.isArray(episodes)) {
             return log('No episode data available');
@@ -5160,158 +5161,36 @@ Or simple text format:
         const rtList = eps.map(e => e.runtime).filter(n => typeof n === 'number' && n > 0);
         const seasonAvg = rtList.length ? Math.round(rtList.reduce((a, b) => a + b, 0) / rtList.length) : 0;
 
-        const count = Math.min(25, eps.length);
-        log(`📊 Preparing to fill ${count} episodes...`);
+        await ensureRows(eps.length);
+        const rows = gatherRows();
+        const count = Math.min(25, Math.min(rows.length, eps.length));
 
-        // CRITICAL: Ensure ALL rows are created BEFORE we start filling
-        log(`📊 Creating ${count} form rows...`);
-        await ensureRows(count);
-        
-        // Wait a bit for all rows to be fully rendered
-        await sleep(200);
-        
-        // Verify we have enough rows
-        let rows = gatherRows();
-        let attempts = 0;
-        while (rows.length < count && attempts < 10) {
-            log(`📊 Only ${rows.length} rows found, need ${count}. Creating more...`);
-            await ensureRows(count);
-            await sleep(200);
-            rows = gatherRows();
-            attempts++;
-        }
-        
-        if (rows.length < count) {
-            log(`⚠️ Warning: Only ${rows.length} rows available, but need ${count} episodes`);
-        }
-        
-        log(`📊 Found ${rows.length} rows. Starting to fill ${count} episodes...`);
-
-        // Strategy: Fill episode numbers in REVERSE order to avoid overwriting
-        // Then match and fill details by episode number
-        
-        // Step 1: Fill episode numbers in reverse order (last episode first)
-        // This prevents early episodes from being overwritten
-        log(`📊 Step 1: Filling episode numbers in reverse order...`);
-        for (let i = count - 1; i >= 0; i--) {
-            if (i >= rows.length) continue;
-            
+        for (let i = 0; i < count; i++) {
             const row = rows[i];
             const ep = eps[i];
             if (!row || !ep) continue;
-            
-            const numEl = inputByLabelWithin(row, 'Episode #');
-            if (numEl) {
-                numEl.value = String(ep.episode_number);
-                fire(numEl, 'input');
-                fire(numEl, 'change');
-                log(`📊 Set episode # ${ep.episode_number} in row ${i}`);
-            }
-            await sleep(100); // Longer delay to ensure form updates
-        }
-        
-        // Wait for form to fully update after filling all episode numbers
-        log(`📊 Waiting for form to update...`);
-        await sleep(500);
-        
-        // Step 2: Re-gather rows and match episodes by number, then fill details
-        const updatedRows = gatherRows();
-        log(`📊 Step 2: Re-gathered ${updatedRows.length} rows. Matching episodes by number...`);
-        
-        let filledCount = 0;
-        for (let i = 0; i < count; i++) {
-            const ep = eps[i];
-            if (!ep) continue;
-            
-            // Find the row that has this episode number
-            let targetRow = null;
-            let targetRowIndex = -1;
-            for (let r = 0; r < updatedRows.length; r++) {
-                const row = updatedRows[r];
-                const numEl = inputByLabelWithin(row, 'Episode #');
-                if (numEl && numEl.value && parseInt(numEl.value) === ep.episode_number) {
-                    targetRow = row;
-                    targetRowIndex = r;
-                    break;
-                }
-            }
-            
-            if (!targetRow) {
-                log(`⚠️ Could not find row with episode number ${ep.episode_number}`);
-                continue;
-            }
-            
-            log(`📊 Filling Episode ${ep.episode_number} "${ep.name}" into row ${targetRowIndex}`);
-            
-            // Fill the rest of the episode data
-            fillRow(targetRow, {
+            fillRow(row, {
                 num: ep.episode_number,
                 name: ep.name,
                 overview: ep.overview,
                 date: ep.air_date,
                 runtime: ep.runtime || seasonAvg
             });
-            
-            filledCount++;
-            await sleep(100); // Delay between fills
         }
-        
-        log(`✅ Successfully filled ${filledCount} of ${count} episodes. Review, tweak, submit.`);
+        log(`Episodes filled (TMDB). Review, tweak, submit.`);
     }
 
-    // Fixed: Create exactly 'need' rows by clicking (need - have) times
-    // Uses gatherRows() for consistent counting (matches what fillBulkTMDB uses)
+    // EXACT copy from v1.5.0 - simple and working
     async function ensureRows(n) {
         const addBtn = Array.from(document.querySelectorAll('button')).find(b => 
             /add another/i.test(b.textContent || '')
         );
-        
-        if (!addBtn) {
-            log('⚠️ Could not find "Add another" button');
-            return;
-        }
-        
+        const have = document.querySelectorAll('textarea').length;
         const need = Math.min(25, n);
         
-        // Use gatherRows() for consistent counting (same method used in fillBulkTMDB)
-        let have = gatherRows().length;
-        
-        log(`📊 ensureRows: Starting with ${have} rows, need ${need} total`);
-        
-        if (have >= need) {
-            log(`✓ Already have ${have} rows, need ${need}. No rows to add.`);
-            return;
-        }
-        
-        // Calculate exactly how many rows to add
-        const toAdd = need - have;
-        log(`📊 Need to add exactly ${toAdd} rows`);
-        
-        // Click exactly 'toAdd' times, regardless of immediate count updates
-        // This ensures we create the right number even if gatherRows() is slow to detect new rows
-        for (let i = 0; i < toAdd; i++) {
+        for (let i = have; i < need && addBtn; i++) {
             addBtn.click();
-            await sleep(150); // Wait for DOM to update
-            
-            // Verify after each click (for logging only)
-            const currentCount = gatherRows().length;
-            log(`📊 Click ${i + 1}/${toAdd}: gatherRows() now sees ${currentCount} rows`);
-        }
-        
-        // Wait for all rows to be fully rendered
-        await sleep(500);
-        
-        // Final verification
-        const finalCount = gatherRows().length;
-        log(`📊 ensureRows: Final count ${finalCount} rows (needed: ${need}, clicked ${toAdd} times)`);
-        
-        // If still short, create one more (safety net)
-        if (finalCount < need) {
-            log(`⚠️ Still short by ${need - finalCount} rows. Creating additional row...`);
-            addBtn.click();
-            await sleep(300);
-            const newFinalCount = gatherRows().length;
-            log(`📊 After safety click: ${newFinalCount} rows`);
+            await sleep(40);
         }
     }
 
