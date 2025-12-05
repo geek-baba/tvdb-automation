@@ -807,7 +807,6 @@
                         <select id="tvdb-episode-source" style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: #333; color: white; margin-bottom: 10px;">
                             <option value="tmdb">TMDB (Recommended)</option>
                             <option value="omdb">OMDb Only (IMDb ID)</option>
-                            <option value="hoichoi">Hoichoi (URL)</option>
                             <option value="manual">Manual Input (Paste Data)</option>
                         </select>
                     </div>
@@ -834,18 +833,6 @@
                                    value="${context.imdbId}">
                             <div style="font-size: 10px; color: #999; margin-bottom: 10px;">
                                 ⚠️ OMDb episode data: titles and air dates only, limited descriptions
-                            </div>
-                        </div>
-                    </div>
-
-                    <div id="tvdb-hoichoi-episode-fields" style="display: none;">
-                        <div style="margin-bottom: 15px;">
-                            <label style="display: block; margin-bottom: 5px; color: #ccc;">Hoichoi Show URL:</label>
-                            <input type="text" id="tvdb-hoichoi-url-step3" placeholder="e.g., https://www.hoichoi.tv/shows/chill-dil-hoichoi-mini"
-                                   style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: #333; color: white; margin-bottom: 5px;"
-                                   value="${window.tvdbFetchedData?.officialSite || ''}">
-                            <div style="font-size: 10px; color: #999; margin-bottom: 10px;">
-                                ⚠️ Hoichoi episode data: scraped from show page, may have limited descriptions
                             </div>
                         </div>
                     </div>
@@ -1200,27 +1187,18 @@ Or simple text format:
                     episodeSourceSelect.onchange = function() {
                         const tmdbEpisodeFields = document.getElementById('tvdb-tmdb-episode-fields');
                         const omdbEpisodeFields = document.getElementById('tvdb-omdb-episode-fields');
-                        const hoichoiEpisodeFields = document.getElementById('tvdb-hoichoi-episode-fields');
                         const manualEpisodeFields = document.getElementById('tvdb-manual-episode-fields');
                         if (this.value === 'omdb') {
                             if (tmdbEpisodeFields) tmdbEpisodeFields.style.display = 'none';
                             if (omdbEpisodeFields) omdbEpisodeFields.style.display = 'block';
-                            if (hoichoiEpisodeFields) hoichoiEpisodeFields.style.display = 'none';
-                            if (manualEpisodeFields) manualEpisodeFields.style.display = 'none';
-                        } else if (this.value === 'hoichoi') {
-                            if (tmdbEpisodeFields) tmdbEpisodeFields.style.display = 'none';
-                            if (omdbEpisodeFields) omdbEpisodeFields.style.display = 'none';
-                            if (hoichoiEpisodeFields) hoichoiEpisodeFields.style.display = 'block';
                             if (manualEpisodeFields) manualEpisodeFields.style.display = 'none';
                         } else if (this.value === 'manual') {
                             if (tmdbEpisodeFields) tmdbEpisodeFields.style.display = 'none';
                             if (omdbEpisodeFields) omdbEpisodeFields.style.display = 'none';
-                            if (hoichoiEpisodeFields) hoichoiEpisodeFields.style.display = 'none';
                             if (manualEpisodeFields) manualEpisodeFields.style.display = 'block';
                         } else {
                             if (tmdbEpisodeFields) tmdbEpisodeFields.style.display = 'block';
                             if (omdbEpisodeFields) omdbEpisodeFields.style.display = 'none';
-                            if (hoichoiEpisodeFields) hoichoiEpisodeFields.style.display = 'none';
                             if (manualEpisodeFields) manualEpisodeFields.style.display = 'none';
                         }
                     };
@@ -1693,9 +1671,6 @@ Or simple text format:
         if (episodeSource === 'omdb') {
             // OMDb-only mode
             await fetchEpisodesOmdbOnly();
-        } else if (episodeSource === 'hoichoi') {
-            // Hoichoi mode
-            await fetchEpisodesHoichoi();
         } else if (episodeSource === 'manual') {
             // Manual input mode
             await fetchEpisodesManual();
@@ -5107,106 +5082,25 @@ Or simple text format:
         }
 
         const eps = episodes.slice().sort((a, b) => (a.episode_number || 0) - (b.episode_number || 0));
-        log(`📊 fillBulkTMDB: Sorted ${eps.length} episodes. Order:`, eps.map(e => `Ep ${e.episode_number}: "${e.name}"`).join(', '));
-        
         const rtList = eps.map(e => e.runtime).filter(n => typeof n === 'number' && n > 0);
         const seasonAvg = rtList.length ? Math.round(rtList.reduce((a, b) => a + b, 0) / rtList.length) : 0;
 
         await ensureRows(eps.length);
-        const count = Math.min(25, Math.min(eps.length, 25));
+        const rows = gatherRows();
+        const count = Math.min(25, Math.min(rows.length, eps.length));
 
-        log(`📊 fillBulkTMDB: Filling ${count} episodes...`);
-        log(`📊 Episode order:`, eps.map(e => `Ep ${e.episode_number}: "${e.name}"`).join(', '));
-
-        // Track which episode numbers have been filled to prevent duplicates
-        const filledEpisodes = new Set();
-
-        // Fill episodes one at a time, re-gathering rows each time to handle DOM changes
         for (let i = 0; i < count; i++) {
-            const ep = eps[i];
-            if (!ep) {
-                log(`⚠️ No episode at index ${i}`);
-                continue;
-            }
-            
-            // Re-gather rows each time to get fresh references (DOM might have changed)
-            const rows = gatherRows();
-            log(`📊 [${i+1}/${count}] Re-gathered ${rows.length} rows`);
-            
-            if (i >= rows.length) {
-                log(`⚠️ Not enough rows (need ${i+1}, have ${rows.length})`);
-                break;
-            }
-            
             const row = rows[i];
-            if (!row) {
-                log(`⚠️ No row at index ${i}`);
-                continue;
-            }
-            
-            // Verify we're filling into the right row by checking if it's empty or has the expected episode number
-            const numEl = inputByLabelWithin(row, 'Episode #');
-            const nameEl = inputByLabelWithin(row, 'Name');
-            const currentNum = numEl ? (numEl.value ? parseInt(numEl.value) : null) : null;
-            const currentName = nameEl ? nameEl.value : '';
-            
-            // Check if we've already filled this episode number
-            if (filledEpisodes.has(ep.episode_number)) {
-                log(`⚠️ Episode ${ep.episode_number} has already been filled! Skipping to prevent duplicate.`);
-                continue;
-            }
-            
-            // Check if this row already has a different episode filled
-            if (currentNum && currentNum !== ep.episode_number && currentName && currentName.trim().length > 0) {
-                log(`⚠️ Row ${i} already has Episode ${currentNum} "${currentName}", but we want Episode ${ep.episode_number}. Looking for empty row...`);
-                
-                // Try to find an empty row instead
-                let foundEmptyRow = false;
-                for (let r = 0; r < rows.length; r++) {
-                    const checkRow = rows[r];
-                    const checkNumEl = inputByLabelWithin(checkRow, 'Episode #');
-                    const checkNameEl = inputByLabelWithin(checkRow, 'Name');
-                    const checkNum = checkNumEl ? (checkNumEl.value ? parseInt(checkNumEl.value) : null) : null;
-                    const checkName = checkNameEl ? checkNameEl.value : '';
-                    
-                    // Row is empty if episode number is empty/0 and name is empty
-                    if ((!checkNum || checkNum === 0 || checkNum === '') && (!checkName || checkName.trim().length === 0)) {
-                        log(`📊 Found empty row at index ${r}, using it for Episode ${ep.episode_number}`);
-                        fillRow(checkRow, {
-                            num: ep.episode_number,
-                            name: ep.name,
-                            overview: ep.overview,
-                            date: ep.air_date,
-                            runtime: ep.runtime || seasonAvg
-                        });
-                        filledEpisodes.add(ep.episode_number);
-                        foundEmptyRow = true;
-                        break;
-                    }
-                }
-                
-                if (!foundEmptyRow) {
-                    log(`⚠️ No empty row found. Skipping Episode ${ep.episode_number} to avoid overwriting Episode ${currentNum}`);
-                    continue;
-                }
-            } else {
-                // Row is empty or has matching episode number - safe to fill
-                log(`📊 [${i+1}/${count}] Filling row ${i} (current: Ep ${currentNum || 'empty'}) with Episode ${ep.episode_number}: "${ep.name}"`);
-                fillRow(row, {
-                    num: ep.episode_number,
-                    name: ep.name,
-                    overview: ep.overview,
-                    date: ep.air_date,
-                    runtime: ep.runtime || seasonAvg
-                });
-                filledEpisodes.add(ep.episode_number);
-            }
-            
-            // Wait between fills to ensure form updates properly
-            await sleep(200);
+            const ep = eps[i];
+            if (!row || !ep) continue;
+            fillRow(row, {
+                num: ep.episode_number,
+                name: ep.name,
+                overview: ep.overview,
+                date: ep.air_date,
+                runtime: ep.runtime || seasonAvg
+            });
         }
-        
-        log(`✅ Completed filling ${count} episodes`);
         log(`Episodes filled (TMDB). Review, tweak, submit.`);
     }
 
