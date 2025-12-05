@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TVDB Workflow Helper - Complete
 // @namespace    tvdb.workflow
-// @version      1.6.3
+// @version      1.6.4
 // @description  Complete TVDB 5-step workflow helper with TMDB/OMDb/Hoichoi integration and flexible data source modes
 // @author       you
 // @match        https://thetvdb.com/series/create*
@@ -29,7 +29,7 @@
     'use strict';
 
     // Immediate console logs to verify script is running
-    console.log('🎬 TVDB Workflow Helper v1.6.3 - Script file loaded');
+    console.log('🎬 TVDB Workflow Helper v1.6.4 - Script file loaded');
     console.log('📍 Current URL:', window.location.href);
     console.log('📍 Current pathname:', window.location.pathname);
     console.log('📋 Complete 5-step TVDB submission automation');
@@ -237,8 +237,13 @@
     // TMDB to TVDB genre mapping
     const GENRE_MAP = {
         'Action & Adventure': 'Action',
+        'Action': 'Action',
+        'Adventure': 'Adventure',
         'Animation': 'Animation',
         'Comedy': 'Comedy',
+        'Romantic': 'Romance',
+        'Romance': 'Romance',
+        'Love': 'Romance',
         'Crime': 'Crime',
         'Documentary': 'Documentary',
         'Drama': 'Drama',
@@ -248,11 +253,24 @@
         'News': 'News',
         'Reality': 'Reality',
         'Sci-Fi & Fantasy': 'Science Fiction',
+        'Science Fiction': 'Science Fiction',
+        'Sci-Fi': 'Science Fiction',
+        'Fantasy': 'Fantasy',
         'Soap': 'Soap',
         'Talk': 'Talk Show',
         'Thriller': 'Thriller',
+        'Suspense': 'Thriller',
         'War & Politics': 'War',
-        'Western': 'Western'
+        'War': 'War',
+        'Western': 'Western',
+        'Horror': 'Horror',
+        'Musical': 'Musical',
+        'Sport': 'Sport',
+        'Sports': 'Sport',
+        'Martial Arts': 'Action',
+        'Food': 'Food',
+        'History': 'History',
+        'Awards Show': 'Awards Show'
     };
 
     // TMDB to TVDB country mapping (using TVDB country codes)
@@ -3340,51 +3358,139 @@
         if (data.genres && data.genres.length > 0) {
             log(`Processing genres:`, data.genres.map(g => g.name || g));
             
-            // Try multiple selectors for genre checkboxes
-            const genreCheckboxes = document.querySelectorAll('input[type="checkbox"][name*="genre"], input[type="checkbox"][name*="Genre"], input[type="checkbox"][id*="genre"], input[type="checkbox"][id*="Genre"]');
-            log(`Found ${genreCheckboxes.length} genre checkboxes`);
+            // Try multiple selectors for genre checkboxes - be more aggressive
+            let genreCheckboxes = document.querySelectorAll('input[type="checkbox"][name*="genre"], input[type="checkbox"][name*="Genre"], input[type="checkbox"][id*="genre"], input[type="checkbox"][id*="Genre"]');
             
+            // If no genre-specific checkboxes found, try to find all checkboxes and filter by context
             if (genreCheckboxes.length === 0) {
-                // Try alternative selectors
-                const altCheckboxes = document.querySelectorAll('input[type="checkbox"]');
-                log(`Found ${altCheckboxes.length} total checkboxes, looking for genre-related ones`);
-                altCheckboxes.forEach((cb, index) => {
-                    const label = cb.nextElementSibling?.textContent || cb.parentElement?.textContent || '';
-                    if (label.toLowerCase().includes('genre') || label.toLowerCase().includes('action') || label.toLowerCase().includes('drama')) {
-                        log(`Checkbox ${index}: ${cb.name || cb.id} - ${label}`);
-                    }
+                log('No genre-specific checkboxes found, searching all checkboxes...');
+                const allCheckboxes = document.querySelectorAll('input[type="checkbox"]');
+                log(`Found ${allCheckboxes.length} total checkboxes`);
+                
+                // Look for checkboxes that are near genre-related text
+                const genreSection = document.querySelector('[class*="genre"], [id*="genre"], label:contains("Genre"), label:contains("genre")')?.closest('div, section, form') || document.body;
+                genreCheckboxes = genreSection.querySelectorAll('input[type="checkbox"]');
+                log(`Found ${genreCheckboxes.length} checkboxes in genre section`);
+                
+                // If still none, try to find checkboxes with common genre names in their labels
+                if (genreCheckboxes.length === 0) {
+                    const genreNames = ['Action', 'Comedy', 'Drama', 'Romance', 'Thriller', 'Horror', 'Sci-Fi', 'Fantasy'];
+                    genreCheckboxes = Array.from(allCheckboxes).filter(cb => {
+                        const label = cb.nextElementSibling?.textContent || cb.parentElement?.textContent || cb.closest('label')?.textContent || '';
+                        return genreNames.some(name => label.toLowerCase().includes(name.toLowerCase()));
+                    });
+                    log(`Found ${genreCheckboxes.length} checkboxes by genre name matching`);
+                }
+            } else {
+                log(`Found ${genreCheckboxes.length} genre checkboxes using specific selectors`);
+            }
+
+            // Log all found checkboxes for debugging
+            if (genreCheckboxes.length > 0) {
+                log('Available genre checkboxes:');
+                Array.from(genreCheckboxes).forEach((cb, index) => {
+                    const label = cb.nextElementSibling?.textContent || cb.parentElement?.textContent || cb.closest('label')?.textContent || '';
+                    const value = cb.value || '';
+                    const name = cb.name || '';
+                    log(`  Checkbox ${index}: value="${value}", name="${name}", label="${label.trim().substring(0, 50)}"`);
                 });
             }
 
             // Clear existing selections
-            genreCheckboxes.forEach(cb => cb.checked = false);
+            genreCheckboxes.forEach(cb => {
+                cb.checked = false;
+                cb.dispatchEvent(new Event('change', { bubbles: true }));
+            });
 
             // Select mapped genres
+            let genresSelected = 0;
             data.genres.forEach(genre => {
-                const genreName = genre.name || genre;
+                const genreName = (genre.name || genre).toString().trim();
                 const tvdbGenre = GENRE_MAP[genreName];
-                log(`Mapping genre: ${genreName} -> ${tvdbGenre}`);
+                log(`Mapping genre: "${genreName}" -> "${tvdbGenre || 'NO MAPPING'}"`);
                 
                 if (tvdbGenre) {
+                    // Try multiple matching strategies
                     const checkbox = Array.from(genreCheckboxes).find(cb => {
-                        const label = cb.nextElementSibling?.textContent || cb.parentElement?.textContent || '';
-                        return cb.value === tvdbGenre || 
-                               label.toLowerCase().includes(tvdbGenre.toLowerCase()) ||
-                               label.toLowerCase().includes(genreName.toLowerCase());
+                        const label = (cb.nextElementSibling?.textContent || cb.parentElement?.textContent || cb.closest('label')?.textContent || '').toLowerCase().trim();
+                        const value = (cb.value || '').toLowerCase().trim();
+                        const name = (cb.name || '').toLowerCase().trim();
+                        const tvdbLower = tvdbGenre.toLowerCase();
+                        const genreLower = genreName.toLowerCase();
+                        
+                        // Strategy 1: Exact value match
+                        if (value === tvdbLower || value === genreLower) {
+                            log(`  ✓ Exact value match: "${value}"`);
+                            return true;
+                        }
+                        
+                        // Strategy 2: Label contains TVDB genre name
+                        if (label.includes(tvdbLower)) {
+                            log(`  ✓ Label contains TVDB genre: "${label.substring(0, 50)}"`);
+                            return true;
+                        }
+                        
+                        // Strategy 3: Label contains original genre name
+                        if (label.includes(genreLower)) {
+                            log(`  ✓ Label contains original genre: "${label.substring(0, 50)}"`);
+                            return true;
+                        }
+                        
+                        // Strategy 4: Special handling for common genres
+                        const genreVariations = {
+                            'action': ['action', 'adventure'],
+                            'comedy': ['comedy', 'comic'],
+                            'drama': ['drama', 'dramatic'],
+                            'romance': ['romance', 'romantic', 'love'],
+                            'thriller': ['thriller', 'suspense'],
+                            'horror': ['horror', 'scary'],
+                            'science fiction': ['sci-fi', 'science fiction', 'scifi', 'sf'],
+                            'fantasy': ['fantasy', 'magic']
+                        };
+                        
+                        for (const [key, variations] of Object.entries(genreVariations)) {
+                            if (tvdbLower.includes(key) || genreLower.includes(key)) {
+                                if (variations.some(v => label.includes(v))) {
+                                    log(`  ✓ Genre variation match: "${label.substring(0, 50)}"`);
+                                    return true;
+                                }
+                            }
+                        }
+                        
+                        return false;
                     });
                     
                     if (checkbox) {
                         checkbox.checked = true;
                         checkbox.dispatchEvent(new Event('change', { bubbles: true }));
-                        log(`Selected genre: ${tvdbGenre}`);
+                        checkbox.dispatchEvent(new Event('click', { bubbles: true }));
+                        const labelText = checkbox.nextElementSibling?.textContent || checkbox.parentElement?.textContent || checkbox.closest('label')?.textContent || '';
+                        log(`✅ Selected genre: ${tvdbGenre} (checkbox label: "${labelText.trim().substring(0, 50)}")`);
+                        genresSelected++;
                         filledCount++;
                     } else {
-                        log(`Genre checkbox not found for: ${tvdbGenre}`);
+                        log(`❌ Genre checkbox not found for: ${tvdbGenre} (from "${genreName}")`);
+                        log(`   Tried matching: value="${tvdbGenre}", label contains "${tvdbGenre.toLowerCase()}" or "${genreName.toLowerCase()}"`);
                     }
                 } else {
-                    log(`No mapping found for genre: ${genreName}`);
+                    log(`⚠️ No mapping found for genre: "${genreName}"`);
+                    // Try direct matching without mapping
+                    const directMatch = Array.from(genreCheckboxes).find(cb => {
+                        const label = (cb.nextElementSibling?.textContent || cb.parentElement?.textContent || cb.closest('label')?.textContent || '').toLowerCase();
+                        return label.includes(genreName.toLowerCase());
+                    });
+                    if (directMatch) {
+                        directMatch.checked = true;
+                        directMatch.dispatchEvent(new Event('change', { bubbles: true }));
+                        directMatch.dispatchEvent(new Event('click', { bubbles: true }));
+                        log(`✅ Direct match found for genre: "${genreName}"`);
+                        genresSelected++;
+                        filledCount++;
+                    }
                 }
             });
+            
+            log(`Genre selection complete: ${genresSelected}/${data.genres.length} genres selected`);
         }
 
         log(`Step 2 applied. Filled ${filledCount} fields`);
@@ -4613,7 +4719,7 @@
     
     window.tvdbHelperTest = function() {
         console.log('🧪 TVDB Helper Test Function');
-        console.log('Script version: 1.6.3');
+        console.log('Script version: 1.6.4');
         console.log('Current step:', getCurrentStep());
         console.log('Document ready:', document.readyState);
         console.log('Body exists:', !!document.body);
