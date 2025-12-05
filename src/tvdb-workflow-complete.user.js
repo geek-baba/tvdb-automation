@@ -29,6 +29,8 @@
 
     console.log('🎬 TVDB Workflow Helper v1.6.0 - Production Ready');
     console.log('📋 Complete 5-step TVDB submission automation');
+    console.log('📍 Script loaded on:', window.location.href);
+    console.log('⌨️  Keyboard shortcut: Ctrl+Shift+T (or Cmd+Shift+T on Mac) to show/hide');
     console.log('🔧 TMDB + OMDb + Hoichoi integration with flexible data source modes');
 
     // Configuration and state
@@ -340,13 +342,19 @@
     // Wait for page to load
     function waitForPage() {
         try {
-            if (document.readyState === 'complete') {
-                init();
+            // Check if body exists and page is ready
+            if (document.readyState === 'complete' && document.body) {
+                // Small delay to ensure DOM is fully ready
+                setTimeout(() => {
+                    init();
+                }, 100);
             } else {
                 setTimeout(waitForPage, 100);
             }
         } catch (error) {
             console.error('❌ Error in waitForPage:', error);
+            // Retry after a delay
+            setTimeout(waitForPage, 500);
         }
     }
 
@@ -354,16 +362,30 @@
     function init() {
         try {
             log('Initializing TVDB Workflow Helper - Complete');
+            log('Current URL:', window.location.href);
+            log('Current path:', window.location.pathname);
+            log('Document ready state:', document.readyState);
+            
             loadConfig();
             
+            // Setup keyboard shortcut first
+            setupKeyboardShortcut();
+            
+            // Create floating toggle button
+            createFloatingToggle();
+            
+            // Create main UI
             createUI();
+            
+            log('✅ Initialization complete');
         } catch (error) {
             console.error('❌ Error initializing TVDB Workflow Helper:', error);
+            console.error('Error stack:', error.stack);
             // Try to show a basic error message
             try {
                 const errorDiv = document.createElement('div');
-                errorDiv.style.cssText = 'position:fixed;top:20px;right:20px;background:red;color:white;padding:10px;z-index:99999;';
-                errorDiv.textContent = 'TVDB Helper Error: ' + error.message;
+                errorDiv.style.cssText = 'position:fixed;top:20px;right:20px;background:red;color:white;padding:10px;z-index:99999;border-radius:4px;';
+                errorDiv.innerHTML = '<strong>TVDB Helper Error:</strong><br>' + error.message + '<br><small>Check console for details</small>';
                 document.body.appendChild(errorDiv);
             } catch (e) {
                 // If we can't even show an error, just log it
@@ -378,7 +400,99 @@
         const panel = document.getElementById('tvdb-helper-ui');
         if (panel) {
             panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+        } else {
+            // If panel doesn't exist, create it
+            log('Panel not found, creating UI...');
+            createUI();
         }
+    }
+
+    // Force show panel (creates if doesn't exist)
+    function forceShowPanel() {
+        const panel = document.getElementById('tvdb-helper-ui');
+        if (panel) {
+            panel.style.display = 'block';
+            log('Panel forced to show');
+        } else {
+            log('Panel not found, creating UI...');
+            createUI();
+        }
+    }
+
+    // Create floating toggle button
+    function createFloatingToggle() {
+        // Remove existing toggle if any
+        const existingToggle = document.getElementById('tvdb-helper-toggle');
+        if (existingToggle) {
+            existingToggle.remove();
+        }
+
+        const toggleBtn = document.createElement('button');
+        toggleBtn.id = 'tvdb-helper-toggle';
+        toggleBtn.innerHTML = '🎬';
+        toggleBtn.title = 'TVDB Helper (Ctrl+Shift+T)';
+        toggleBtn.style.cssText = `
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 50px;
+            height: 50px;
+            background: #2d5aa0;
+            color: white;
+            border: 2px solid #1a3d6b;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 24px;
+            z-index: 99998;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        `;
+        
+        toggleBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            forceShowPanel();
+        });
+
+        toggleBtn.addEventListener('mouseenter', function() {
+            this.style.background = '#3d6ab0';
+            this.style.transform = 'scale(1.1)';
+        });
+
+        toggleBtn.addEventListener('mouseleave', function() {
+            this.style.background = '#2d5aa0';
+            this.style.transform = 'scale(1)';
+        });
+
+        // Ensure body exists before appending
+        if (!document.body) {
+            log('⚠️ document.body not ready for toggle button, waiting...');
+            setTimeout(() => {
+                if (document.body) {
+                    document.body.appendChild(toggleBtn);
+                    log('Floating toggle button created');
+                }
+            }, 200);
+        } else {
+            document.body.appendChild(toggleBtn);
+            log('Floating toggle button created');
+        }
+    }
+
+    // Setup keyboard shortcut (Ctrl+Shift+T)
+    function setupKeyboardShortcut() {
+        document.addEventListener('keydown', function(e) {
+            // Ctrl+Shift+T (or Cmd+Shift+T on Mac)
+            if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'T') {
+                e.preventDefault();
+                e.stopPropagation();
+                log('Keyboard shortcut triggered (Ctrl+Shift+T)');
+                forceShowPanel();
+            }
+        });
+        log('Keyboard shortcut registered: Ctrl+Shift+T (or Cmd+Shift+T on Mac)');
     }
 
     // Create the user interface
@@ -436,12 +550,25 @@
         document.head.appendChild(style);
 
         container.innerHTML = generateUIHTML(currentStep);
-        document.body.appendChild(container);
-
-        // Add event listeners
-        setupEventListeners();
-
-        log('UI created successfully for step:', currentStep);
+        
+        // Ensure body exists before appending
+        if (!document.body) {
+            log('⚠️ document.body not ready, waiting...');
+            setTimeout(() => {
+                if (document.body) {
+                    document.body.appendChild(container);
+                    setupEventListeners();
+                    log('UI created successfully for step:', currentStep);
+                } else {
+                    log('❌ document.body still not available');
+                }
+            }, 200);
+        } else {
+            document.body.appendChild(container);
+            // Add event listeners
+            setupEventListeners();
+            log('UI created successfully for step:', currentStep);
+        }
     }
 
     // Generate UI HTML based on current step
