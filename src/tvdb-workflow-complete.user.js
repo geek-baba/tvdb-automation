@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TVDB Workflow Helper - Complete
 // @namespace    tvdb.workflow
-// @version      1.8.8
+// @version      1.8.9
 // @description  Complete TVDB 5-step workflow helper with TMDB/OMDb/Hoichoi integration and flexible data source modes
 // @author       you
 // @match        https://thetvdb.com/series/create*
@@ -5180,12 +5180,22 @@ Or simple text format:
         log(`Episodes filled (TMDB). Review, tweak, submit.`);
     }
 
-    // EXACT copy from v1.5.0 - simple and working
+    // Fixed: Exclude UI panel textareas from count to prevent "one less row" issue
     async function ensureRows(n) {
         const addBtn = Array.from(document.querySelectorAll('button')).find(b => 
             /add another/i.test(b.textContent || '')
         );
-        const have = document.querySelectorAll('textarea').length;
+        
+        // Count only episode form textareas, exclude UI panel textareas
+        // This fixes the issue where UI panel textarea (tvdb-manual-episode-data) 
+        // was being counted, causing one less row to be created
+        const allTextareas = Array.from(document.querySelectorAll('textarea'));
+        const episodeTextareas = allTextareas.filter(ta => {
+            // Exclude textareas inside the UI panel
+            const panel = ta.closest('#tvdb-helper-panel');
+            return !panel; // Only count textareas NOT in the UI panel
+        });
+        const have = episodeTextareas.length;
         const need = Math.min(25, n);
         
         for (let i = have; i < need && addBtn; i++) {
