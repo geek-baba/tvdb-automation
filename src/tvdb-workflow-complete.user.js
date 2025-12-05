@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TVDB Workflow Helper - Complete
 // @namespace    tvdb.workflow
-// @version      1.7.1
+// @version      1.7.2
 // @description  Complete TVDB 5-step workflow helper with TMDB/OMDb/Hoichoi integration and flexible data source modes
 // @author       you
 // @match        https://thetvdb.com/series/create*
@@ -29,7 +29,7 @@
     'use strict';
 
     // Immediate console logs to verify script is running
-    console.log('🎬 TVDB Workflow Helper v1.7.1 - Script file loaded');
+    console.log('🎬 TVDB Workflow Helper v1.7.2 - Script file loaded');
     console.log('📍 Current URL:', window.location.href);
     console.log('📍 Current pathname:', window.location.pathname);
     console.log('📋 Complete 5-step TVDB submission automation');
@@ -3233,94 +3233,172 @@
 
         // Strategy 1: Try to extract from JSON data in script tags (most reliable)
         try {
-            const scriptTags = doc.querySelectorAll('script[type="application/json"], script[id*="__NEXT_DATA__"], script:not([src])');
-            for (const script of scriptTags) {
+            const scriptTags = doc.querySelectorAll('script[type="application/json"], script[id*="__NEXT_DATA__"], script[id*="__NEXT"], script:not([src])');
+            log(`🔍 Found ${scriptTags.length} script tags to check for JSON data`);
+            
+            for (let i = 0; i < scriptTags.length; i++) {
+                const script = scriptTags[i];
                 try {
                     const scriptText = script.textContent || script.innerHTML;
                     if (!scriptText || scriptText.length < 100) continue;
+                    
+                    log(`🔍 Checking script tag ${i + 1}/${scriptTags.length} (${scriptText.length} chars)`);
 
-                    // Try to find episode data in JSON
-                    const jsonMatches = scriptText.match(/\{[^{}]*(?:episodes|episode|Episodes|Episode)[^{}]*\}/g);
-                    if (jsonMatches) {
-                        for (const jsonStr of jsonMatches) {
-                            try {
-                                const data = JSON.parse(jsonStr);
-                                if (data.episodes || data.Episodes || (Array.isArray(data) && data.length > 0)) {
-                                    const foundEpisodes = data.episodes || data.Episodes || data;
-                                    if (Array.isArray(foundEpisodes) && foundEpisodes.length > 0) {
-                                        log(`Found ${foundEpisodes.length} episodes in JSON data`);
-                                        foundEpisodes.forEach((ep, idx) => {
-                                            if (ep && (ep.episodeNumber || ep.episode_number || ep.number || ep.Episode || idx >= 0)) {
-                                                episodes.push({
-                                                    episodeNumber: ep.episodeNumber || ep.episode_number || ep.number || ep.Episode || (idx + 1),
-                                                    name: ep.name || ep.title || ep.Title || `Episode ${ep.episodeNumber || ep.episode_number || ep.number || ep.Episode || (idx + 1)}`,
-                                                    overview: ep.overview || ep.description || ep.plot || ep.Plot || '',
-                                                    airDate: ep.airDate || ep.air_date || ep.released || ep.Released || '',
-                                                    runtime: ep.runtime || ep.duration || 0,
-                                                    isHoichoiOnly: true,
-                                                    descriptionSource: 'Hoichoi'
-                                                });
-                                            }
-                                        });
-                                        if (episodes.length > 0) {
-                                            log(`Successfully parsed ${episodes.length} episodes from JSON`);
-                                            return episodes;
-                                        }
-                                    }
-                                }
-                            } catch (e) {
-                                // Not valid JSON, continue
-                            }
-                        }
-                    }
-
-                    // Try parsing entire script as JSON
+                    // Try parsing entire script as JSON first (most comprehensive)
                     try {
                         const fullData = JSON.parse(scriptText);
-                        const searchForEpisodes = (obj, path = '') => {
+                        log(`✅ Successfully parsed script tag ${i + 1} as JSON`);
+                        
+                        // Enhanced recursive search for episodes
+                        const searchForEpisodes = (obj, path = '', depth = 0) => {
+                            if (depth > 10) return null; // Prevent infinite recursion
                             if (!obj || typeof obj !== 'object') return null;
-                            if (Array.isArray(obj) && obj.length > 0 && obj[0] && (obj[0].episodeNumber || obj[0].episode_number || obj[0].number || obj[0].Episode)) {
-                                return obj;
+                            
+                            // Check if this is an array of episodes
+                            if (Array.isArray(obj) && obj.length > 0) {
+                                const firstItem = obj[0];
+                                if (firstItem && typeof firstItem === 'object') {
+                                    // Check if it looks like an episode object
+                                    const hasEpisodeFields = 
+                                        firstItem.episodeNumber || firstItem.episode_number || 
+                                        firstItem.number || firstItem.Episode ||
+                                        firstItem.episode || firstItem.ep ||
+                                        firstItem.title || firstItem.name || firstItem.Title ||
+                                        firstItem.episodeName || firstItem.episode_name;
+                                    
+                                    if (hasEpisodeFields) {
+                                        log(`✅ Found episode array at path: ${path} (${obj.length} items)`);
+                                        return obj;
+                                    }
+                                }
                             }
+                            
+                            // Check object keys for episode-related fields
                             for (const key in obj) {
-                                if (key.toLowerCase().includes('episode') && Array.isArray(obj[key]) && obj[key].length > 0) {
+                                const keyLower = key.toLowerCase();
+                                
+                                // Direct episode array
+                                if ((keyLower.includes('episode') || keyLower.includes('ep')) && 
+                                    Array.isArray(obj[key]) && obj[key].length > 0) {
+                                    log(`✅ Found episode array at key: ${key} (${obj[key].length} items)`);
                                     return obj[key];
                                 }
+                                
+                                // Nested search
                                 if (typeof obj[key] === 'object' && obj[key] !== null) {
-                                    const found = searchForEpisodes(obj[key], path + '.' + key);
+                                    const found = searchForEpisodes(obj[key], path + '.' + key, depth + 1);
                                     if (found) return found;
                                 }
                             }
+                            
                             return null;
                         };
+                        
                         const foundEpisodes = searchForEpisodes(fullData);
                         if (foundEpisodes && foundEpisodes.length > 0) {
-                            log(`Found ${foundEpisodes.length} episodes in nested JSON structure`);
+                            log(`✅ Found ${foundEpisodes.length} episodes in JSON structure`);
                             foundEpisodes.forEach((ep, idx) => {
+                                if (!ep || typeof ep !== 'object') return;
+                                
+                                // Extract episode number
+                                const epNum = ep.episodeNumber || ep.episode_number || ep.number || 
+                                            ep.Episode || ep.episode || ep.ep || ep.index || (idx + 1);
+                                
+                                // Extract title
+                                const title = ep.name || ep.title || ep.Title || ep.episodeName || 
+                                            ep.episode_name || ep.episodeTitle || ep.episode_title ||
+                                            ep.displayName || ep.display_name || '';
+                                
+                                // Extract description
+                                const desc = ep.overview || ep.description || ep.plot || ep.Plot || 
+                                           ep.synopsis || ep.Synopsis || ep.summary || ep.Summary || '';
+                                
+                                // Extract runtime (handle both minutes and seconds)
+                                let runtime = 0;
+                                if (ep.runtime) runtime = parseInt(ep.runtime);
+                                else if (ep.duration) {
+                                    const dur = ep.duration;
+                                    if (typeof dur === 'number') runtime = dur;
+                                    else if (typeof dur === 'string') {
+                                        const match = dur.match(/(\d+)/);
+                                        if (match) runtime = parseInt(match[1]);
+                                    }
+                                } else if (ep.length) {
+                                    const len = ep.length;
+                                    if (typeof len === 'number') runtime = len;
+                                    else if (typeof len === 'string') {
+                                        const match = len.match(/(\d+)/);
+                                        if (match) runtime = parseInt(match[1]);
+                                    }
+                                }
+                                
+                                // Extract air date
+                                const airDate = ep.airDate || ep.air_date || ep.released || ep.Released || 
+                                             ep.publishedAt || ep.published_at || ep.createdAt || ep.created_at || '';
+                                
                                 episodes.push({
-                                    episodeNumber: ep.episodeNumber || ep.episode_number || ep.number || ep.Episode || (idx + 1),
-                                    name: ep.name || ep.title || ep.Title || `Episode ${ep.episodeNumber || ep.episode_number || ep.number || ep.Episode || (idx + 1)}`,
-                                    overview: ep.overview || ep.description || ep.plot || ep.Plot || '',
-                                    airDate: ep.airDate || ep.air_date || ep.released || ep.Released || '',
-                                    runtime: ep.runtime || ep.duration || 0,
+                                    episodeNumber: parseInt(epNum) || (idx + 1),
+                                    name: title || `Episode ${parseInt(epNum) || (idx + 1)}`,
+                                    overview: desc,
+                                    airDate: airDate,
+                                    runtime: runtime,
                                     isHoichoiOnly: true,
                                     descriptionSource: 'Hoichoi'
                                 });
+                                
+                                log(`✅ Parsed Episode ${parseInt(epNum) || (idx + 1)}: "${title || 'No title'}" (${runtime}m)`);
                             });
+                            
                             if (episodes.length > 0) {
-                                log(`Successfully parsed ${episodes.length} episodes from nested JSON`);
+                                log(`✅ Successfully parsed ${episodes.length} episodes from JSON`);
                                 return episodes;
                             }
                         }
                     } catch (e) {
-                        // Not valid JSON, continue
+                        // Not valid JSON, try partial matching
+                        log(`⚠️ Script tag ${i + 1} is not valid JSON, trying partial match...`);
+                        
+                        // Try to find episode data in JSON-like strings
+                        const jsonMatches = scriptText.match(/\{[^{}]*(?:episodes|episode|Episodes|Episode)[^{}]*\}/g);
+                        if (jsonMatches) {
+                            for (const jsonStr of jsonMatches) {
+                                try {
+                                    const data = JSON.parse(jsonStr);
+                                    if (data.episodes || data.Episodes || (Array.isArray(data) && data.length > 0)) {
+                                        const foundEpisodes = data.episodes || data.Episodes || data;
+                                        if (Array.isArray(foundEpisodes) && foundEpisodes.length > 0) {
+                                            log(`✅ Found ${foundEpisodes.length} episodes in partial JSON match`);
+                                            foundEpisodes.forEach((ep, idx) => {
+                                                if (ep && (ep.episodeNumber || ep.episode_number || ep.number || ep.Episode || idx >= 0)) {
+                                                    episodes.push({
+                                                        episodeNumber: ep.episodeNumber || ep.episode_number || ep.number || ep.Episode || (idx + 1),
+                                                        name: ep.name || ep.title || ep.Title || `Episode ${ep.episodeNumber || ep.episode_number || ep.number || ep.Episode || (idx + 1)}`,
+                                                        overview: ep.overview || ep.description || ep.plot || ep.Plot || '',
+                                                        airDate: ep.airDate || ep.air_date || ep.released || ep.Released || '',
+                                                        runtime: ep.runtime || ep.duration || 0,
+                                                        isHoichoiOnly: true,
+                                                        descriptionSource: 'Hoichoi'
+                                                    });
+                                                }
+                                            });
+                                            if (episodes.length > 0) {
+                                                log(`✅ Successfully parsed ${episodes.length} episodes from partial JSON`);
+                                                return episodes;
+                                            }
+                                        }
+                                    }
+                                } catch (e2) {
+                                    // Not valid JSON, continue
+                                }
+                            }
+                        }
                     }
                 } catch (e) {
-                    log(`Error parsing script tag:`, e);
+                    log(`⚠️ Error parsing script tag ${i + 1}:`, e);
                 }
             }
         } catch (e) {
-            log(`Error in JSON extraction strategy:`, e);
+            log(`❌ Error in JSON extraction strategy:`, e);
         }
 
         // Strategy 2: Try multiple HTML selectors to find episode lists
@@ -5573,7 +5651,7 @@
     
     window.tvdbHelperTest = function() {
         console.log('🧪 TVDB Helper Test Function');
-        console.log('Script version: 1.7.1');
+        console.log('Script version: 1.7.2');
         console.log('Current step:', getCurrentStep());
         console.log('Document ready:', document.readyState);
         console.log('Body exists:', !!document.body);
