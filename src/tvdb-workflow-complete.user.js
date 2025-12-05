@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TVDB Workflow Helper - Complete
 // @namespace    tvdb.workflow
-// @version      1.9.4
+// @version      1.9.5
 // @description  Complete TVDB 5-step workflow helper with TMDB/OMDb/Hoichoi integration and flexible data source modes
 // @author       you
 // @match        https://thetvdb.com/series/create*
@@ -648,6 +648,7 @@
                         <select id="tvdb-episode-source" style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: #333; color: white; margin-bottom: 10px;">
                             <option value="tmdb">TMDB (Recommended)</option>
                             <option value="omdb">OMDb Only (IMDb ID)</option>
+                            <option value="manual">Manual Input (Paste Data)</option>
                         </select>
                     </div>
 
@@ -673,6 +674,16 @@
                                    value="${context.imdbId}">
                             <div style="font-size: 10px; color: #999; margin-bottom: 10px;">
                                 ⚠️ OMDb episode data: titles and air dates only, limited descriptions
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="tvdb-manual-episode-fields" style="display: none;">
+                        <div style="margin-bottom: 15px;">
+                            <label style="display: block; margin-bottom: 5px; color: #ccc;">Paste Episode Data (JSON or Text):</label>
+                            <textarea id="tvdb-manual-episode-data" placeholder='Paste episode data here. Examples: CSV format (from Gemini/AI): Episode Number,Title (Original),Runtime,Summary/Description S1 E1,Kiraaye Ka Kissa - Hindi,9m,Shreya is muddled about... S1 E2,Online Shaadi - Hindi,9m,When her parents... JSON format: [ {"episodeNumber": 1, "name": "Kiraaye Ka Kissa - Hindi", "overview": "Shreya is muddled...", "runtime": 9} ] Or simple text format: 1. Kiraaye Ka Kissa - Hindi | 9m | Shreya is muddled...' style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: #333; color: white; min-height: 150px; font-family: monospace; font-size: 11px; margin-bottom: 5px;"></textarea>
+                            <div style="font-size: 10px; color: #999; margin-bottom: 10px;">
+                                💡 Tip: Take a screenshot of Hoichoi episodes, extract data with Gemini/AI, and paste here
                             </div>
                         </div>
                     </div>
@@ -963,12 +974,19 @@
                     episodeSourceSelect.onchange = function() {
                         const tmdbEpisodeFields = document.getElementById('tvdb-tmdb-episode-fields');
                         const omdbEpisodeFields = document.getElementById('tvdb-omdb-episode-fields');
+                        const manualEpisodeFields = document.getElementById('tvdb-manual-episode-fields');
                         if (this.value === 'omdb') {
                             if (tmdbEpisodeFields) tmdbEpisodeFields.style.display = 'none';
                             if (omdbEpisodeFields) omdbEpisodeFields.style.display = 'block';
+                            if (manualEpisodeFields) manualEpisodeFields.style.display = 'none';
+                        } else if (this.value === 'manual') {
+                            if (tmdbEpisodeFields) tmdbEpisodeFields.style.display = 'none';
+                            if (omdbEpisodeFields) omdbEpisodeFields.style.display = 'none';
+                            if (manualEpisodeFields) manualEpisodeFields.style.display = 'block';
                         } else {
                             if (tmdbEpisodeFields) tmdbEpisodeFields.style.display = 'block';
                             if (omdbEpisodeFields) omdbEpisodeFields.style.display = 'none';
+                            if (manualEpisodeFields) manualEpisodeFields.style.display = 'none';
                         }
                     };
                 }
@@ -1323,6 +1341,9 @@
         if (episodeSource === 'omdb') {
             // OMDb-only mode
             await fetchEpisodesOmdbOnly();
+        } else if (episodeSource === 'manual') {
+            // Manual input mode
+            await fetchEpisodesManual();
         } else {
             // TMDB mode (original behavior)
             await fetchEpisodesTmdb();
@@ -1483,6 +1504,257 @@
         } catch (error) {
             updateStatus(`Error fetching OMDb episodes: ${error.message}`);
             log('Error fetching OMDb episodes:', error);
+        }
+    }
+
+    // Fetch episodes from manual input (paste data)
+    async function fetchEpisodesManual() {
+        const manualData = document.getElementById('tvdb-manual-episode-data')?.value.trim();
+        if (!manualData) {
+            updateStatus('Please paste episode data in the text area');
+            return;
+        }
+
+        updateStatus('Parsing manual episode data...');
+        log(`Parsing manual episode data (${manualData.length} characters)`);
+
+        try {
+            let episodes = [];
+
+            // Try parsing as JSON first
+            try {
+                const jsonData = JSON.parse(manualData);
+                if (Array.isArray(jsonData)) {
+                    episodes = jsonData.map((ep, idx) => ({
+                        episodeNumber: ep.episodeNumber || ep.episode_number || ep.number || ep.index || (idx + 1),
+                        name: ep.name || ep.title || ep.Title || ep.episodeName || `Episode ${ep.episodeNumber || ep.episode_number || ep.number || (idx + 1)}`,
+                        overview: ep.overview || ep.description || ep.plot || ep.synopsis || ep.summary || '',
+                        airDate: ep.airDate || ep.air_date || ep.released || ep.publishedAt || '',
+                        runtime: ep.runtime || ep.duration || (ep.runtimeMinutes ? parseInt(ep.runtimeMinutes) : 0) || 0,
+                        isHoichoiOnly: true,
+                        descriptionSource: 'Manual'
+                    }));
+                    log(`✅ Parsed ${episodes.length} episodes from JSON`);
+                } else if (jsonData.episodes || jsonData.data) {
+                    const episodeArray = jsonData.episodes || jsonData.data;
+                    episodes = episodeArray.map((ep, idx) => ({
+                        episodeNumber: ep.episodeNumber || ep.episode_number || ep.number || ep.index || (idx + 1),
+                        name: ep.name || ep.title || ep.Title || ep.episodeName || `Episode ${ep.episodeNumber || ep.episode_number || ep.number || (idx + 1)}`,
+                        overview: ep.overview || ep.description || ep.plot || ep.synopsis || ep.summary || '',
+                        airDate: ep.airDate || ep.air_date || ep.released || ep.publishedAt || '',
+                        runtime: ep.runtime || ep.duration || (ep.runtimeMinutes ? parseInt(ep.runtimeMinutes) : 0) || 0,
+                        isHoichoiOnly: true,
+                        descriptionSource: 'Manual'
+                    }));
+                    log(`✅ Parsed ${episodes.length} episodes from JSON object`);
+                }
+            } catch (e) {
+                // Not JSON, try CSV format
+                log(`Not JSON format, trying CSV parsing...`);
+                
+                // Try CSV format (from Gemini/AI extraction)
+                // Format: "S1 E1,Title - Hindi,9m,Description"
+                const lines = manualData.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+                
+                // Check if first line looks like CSV header
+                const isCSV = lines[0] && (
+                    lines[0].includes('Episode Number') ||
+                    lines[0].includes('Title') ||
+                    lines[0].includes('Runtime') ||
+                    lines[0].includes(',')
+                );
+
+                if (isCSV && lines.length > 1) {
+                    log(`✅ Detected CSV format, parsing ${lines.length - 1} data rows (skipping header)`);
+                    
+                    // Skip header row - find it first
+                    let headerIndex = 0;
+                    for (let idx = 0; idx < lines.length; idx++) {
+                        if (lines[idx].includes('Episode Number') || lines[idx].includes('Title') || lines[idx].includes('Runtime')) {
+                            headerIndex = idx;
+                            log(`📊 Found CSV header at line ${idx}: "${lines[idx]}"`);
+                            break;
+                        }
+                    }
+
+                    // Parse data rows starting after header
+                    for (let i = headerIndex + 1; i < lines.length; i++) {
+                        const line = lines[i];
+                        if (!line || line.trim().length === 0) {
+                            log(`⚠️ Skipping empty line ${i}`);
+                            continue;
+                        }
+
+                        log(`📊 Parsing CSV line ${i}: "${line.substring(0, 50)}..."`);
+
+                        // Parse CSV line: "S1 E1,Title - Hindi,9m,Description"
+                        // Handle quoted fields that may contain commas
+                        const csvFields = [];
+                        let currentField = '';
+                        let inQuotes = false;
+                        for (let j = 0; j < line.length; j++) {
+                            const char = line[j];
+                            if (char === '"') {
+                                inQuotes = !inQuotes;
+                            } else if (char === ',' && !inQuotes) {
+                                csvFields.push(currentField.trim());
+                                currentField = '';
+                            } else {
+                                currentField += char;
+                            }
+                        }
+                        csvFields.push(currentField.trim()); // Add last field
+
+                        if (csvFields.length >= 2) {
+                            // Extract episode number from "S1 E1" format
+                            let episodeNumber = 1;
+                            const epNumMatch = csvFields[0].match(/S\d+\s*E(\d+)|S\d+E(\d+)|[Ee]pisode\s*(\d+)|Ep\s*(\d+)|(\d+)/i);
+                            if (epNumMatch) {
+                                episodeNumber = parseInt(epNumMatch[1] || epNumMatch[2] || epNumMatch[3] || epNumMatch[4] || epNumMatch[5]);
+                                log(`📊 CSV Line ${i}: Extracted episode number ${episodeNumber} from "${csvFields[0]}"`);
+                            } else {
+                                log(`⚠️ CSV Line ${i}: Could not extract episode number from "${csvFields[0]}"`);
+                            }
+
+                            // Extract title (remove language suffix)
+                            let title = csvFields[1] || '';
+                            title = title.replace(/\s*-\s*(Hindi|Bengali|English|Tamil|Telugu|Marathi|Gujarati|Punjabi|Kannada|Malayalam)$/i, '').trim();
+
+                            // Extract runtime (handle "9m" or "34m" format)
+                            let runtime = 0;
+                            if (csvFields.length >= 3 && csvFields[2]) {
+                                const runtimeMatch = csvFields[2].match(/(\d+)\s*m/i);
+                                if (runtimeMatch) {
+                                    runtime = parseInt(runtimeMatch[1]);
+                                }
+                            }
+
+                            // Extract description
+                            let overview = '';
+                            if (csvFields.length >= 4) {
+                                overview = csvFields[3] || '';
+                            } else if (csvFields.length >= 3 && !csvFields[2].match(/\d+m/i)) {
+                                // If field 3 doesn't look like runtime, it might be description
+                                overview = csvFields[2] || '';
+                            }
+
+                            episodes.push({
+                                episodeNumber: episodeNumber,
+                                name: title || `Episode ${episodeNumber}`,
+                                overview: overview,
+                                airDate: '',
+                                runtime: runtime,
+                                isHoichoiOnly: true,
+                                descriptionSource: 'Manual'
+                            });
+                            log(`✅ Parsed CSV Episode ${episodeNumber}: "${title}" (${runtime}m)`);
+                        }
+                    }
+                    if (episodes.length > 0) {
+                        log(`✅ Successfully parsed ${episodes.length} episodes from CSV format`);
+                    }
+                }
+
+                // If CSV parsing didn't work, try other text formats
+                if (episodes.length === 0) {
+                    // Try parsing text format like:
+                    // 1. Title | 9m | Description
+                    // 2. Title | 9m | Description
+                    for (const line of lines) {
+                        // Try pattern: "1. Title - Hindi | 9m | Description"
+                        // Or: "S1 E1: Title - Hindi | 9m | Description"
+                        // Or: "Episode 1: Title - Hindi | 9m | Description"
+                        const patterns = [
+                            /^(?:S\d+\s*E|Episode\s*|Ep\s*)?(\d+)[:.\s-]+\s*(.+?)\s*\|\s*(\d+)m?\s*\|\s*(.+)$/i,
+                            /^(\d+)[:.\s-]+\s*(.+?)\s*\|\s*(\d+)m?\s*\|\s*(.+)$/i,
+                            /^(\d+)[:.\s-]+\s*(.+?)\s*\|\s*(.+)$/i,
+                            /^(\d+)[:.\s-]+\s*(.+)$/i
+                        ];
+
+                        for (const pattern of patterns) {
+                            const match = line.match(pattern);
+                            if (match) {
+                                const epNum = parseInt(match[1]);
+                                let title = match[2]?.trim() || '';
+                                let runtime = 0;
+                                let overview = '';
+
+                                if (match[3]) {
+                                    // Check if match[3] is runtime or part of title
+                                    if (match[3].match(/^\d+$/)) {
+                                        runtime = parseInt(match[3]);
+                                        overview = match[4]?.trim() || '';
+                                    } else {
+                                        overview = match[3]?.trim() || '';
+                                    }
+                                }
+
+                                // Remove language suffix from title
+                                title = title.replace(/\s*-\s*(Hindi|Bengali|English|Tamil|Telugu|Marathi|Gujarati|Punjabi|Kannada|Malayalam)$/i, '').trim();
+
+                                episodes.push({
+                                    episodeNumber: epNum,
+                                    name: title || `Episode ${epNum}`,
+                                    overview: overview,
+                                    airDate: '',
+                                    runtime: runtime,
+                                    isHoichoiOnly: true,
+                                    descriptionSource: 'Manual'
+                                });
+                                break;
+                            }
+                        }
+                    }
+                    if (episodes.length === 0) {
+                        // Try simple numbered list
+                        lines.forEach((line, idx) => {
+                            const epMatch = line.match(/^(\d+)[:.\s-]+\s*(.+)$/);
+                            if (epMatch) {
+                                const epNum = parseInt(epMatch[1]);
+                                let title = epMatch[2].trim();
+                                title = title.replace(/\s*-\s*(Hindi|Bengali|English|Tamil|Telugu)$/i, '').trim();
+                                episodes.push({
+                                    episodeNumber: epNum,
+                                    name: title || `Episode ${epNum}`,
+                                    overview: '',
+                                    airDate: '',
+                                    runtime: 0,
+                                    isHoichoiOnly: true,
+                                    descriptionSource: 'Manual'
+                                });
+                            }
+                        });
+                    }
+                    log(`✅ Parsed ${episodes.length} episodes from text format`);
+                }
+            }
+
+            if (episodes.length === 0) {
+                throw new Error('Could not parse episode data. Please use JSON format or text format like: "1. Title | 9m | Description"');
+            }
+
+            // Sort episodes by episode number to ensure correct order
+            episodes.sort((a, b) => (a.episodeNumber || 0) - (b.episodeNumber || 0));
+            log(`✅ Sorted ${episodes.length} episodes by episode number`);
+
+            // Store episode data globally
+            window.tvdbEpisodeData = {
+                season: parseInt(document.getElementById('tvdb-season-num')?.value || '1'),
+                episodes: episodes,
+                tmdbId: '',
+                imdbId: null,
+                isHoichoiOnly: true
+            };
+
+            // Generate preview
+            const preview = generateStep3Preview(episodes);
+            updatePreview(preview);
+            updateStatus(`Parsed ${episodes.length} episodes from manual input! Click Fill to populate the form.`);
+            log(`Manual episode parsing completed successfully. Found ${episodes.length} episodes`);
+
+        } catch (error) {
+            updateStatus(`Error parsing manual episode data: ${error.message}`);
+            log('Error parsing manual episode data:', error);
         }
     }
 
