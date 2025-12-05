@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TVDB Workflow Helper - Complete
 // @namespace    tvdb.workflow
-// @version      1.6.9
+// @version      1.7.0
 // @description  Complete TVDB 5-step workflow helper with TMDB/OMDb/Hoichoi integration and flexible data source modes
 // @author       you
 // @match        https://thetvdb.com/series/create*
@@ -29,7 +29,7 @@
     'use strict';
 
     // Immediate console logs to verify script is running
-    console.log('🎬 TVDB Workflow Helper v1.6.9 - Script file loaded');
+    console.log('🎬 TVDB Workflow Helper v1.7.0 - Script file loaded');
     console.log('📍 Current URL:', window.location.href);
     console.log('📍 Current pathname:', window.location.pathname);
     console.log('📋 Complete 5-step TVDB submission automation');
@@ -3312,20 +3312,41 @@
         }
 
         // Strategy 2: Try multiple HTML selectors to find episode lists
+        // Prioritize selectors that are more likely to be episode cards
         const episodeSelectors = [
+            // Most specific first
+            '[class*="episode-card"]',
+            '[class*="EpisodeCard"]',
+            '[class*="episode-item"]',
+            '[class*="EpisodeItem"]',
+            '[class*="season"] [class*="episode"]',
+            '[class*="Season"] [class*="Episode"]',
+            // Then more general
             '[class*="episode"]',
             '[class*="Episode"]',
             '[data-episode]',
             '[data-episode-number]',
+            // Card-based selectors (Hoichoi likely uses cards)
+            '[class*="card"][class*="episode"]',
+            '[class*="Card"][class*="Episode"]',
             '[class*="card"]',
-            '[class*="item"]',
+            '[class*="Card"]',
+            // List items
+            'li[class*="episode"]',
+            'li[class*="Episode"]',
+            '[class*="item"][class*="episode"]',
+            '[class*="Item"][class*="Episode"]',
+            // Links
             'a[href*="/episode"]',
             'a[href*="/watch"]',
-            '[class*="season"] [class*="episode"]',
+            // Container-based
             '[class*="episode-list"]',
+            '[class*="EpisodeList"]',
             '[class*="episodes"]',
-            'li[class*="episode"]',
-            'div[class*="episode"]'
+            '[class*="Episodes"]',
+            // Generic divs with episode class
+            'div[class*="episode"]',
+            'div[class*="Episode"]'
         ];
 
         let episodeElements = [];
@@ -3335,10 +3356,23 @@
                 log(`Found ${elements.length} elements with selector: ${selector}`);
                 episodeElements = Array.from(elements);
                 // Only break if we found a reasonable number (not too many false positives)
+                // For episode cards, expect 1-50 episodes typically
                 if (episodeElements.length > 0 && episodeElements.length < 100) {
+                    log(`Using selector: ${selector} (found ${episodeElements.length} elements)`);
                     break;
                 }
             }
+        }
+        
+        // If we found too many elements, try to filter to only episode-like ones
+        if (episodeElements.length > 50) {
+            log(`Too many elements found (${episodeElements.length}), filtering...`);
+            episodeElements = episodeElements.filter(el => {
+                const text = el.textContent || '';
+                // Must contain episode-like patterns
+                return text.match(/S\d+\s*E\d+|Episode\s*\d+|Ep\s*\d+|\d+m/i);
+            });
+            log(`After filtering: ${episodeElements.length} elements`);
         }
 
         // Strategy 3: If no specific episode elements found, try to find numbered items
@@ -3362,78 +3396,209 @@
             log(`Found ${episodeElements.length} elements with episode-like patterns`);
         }
 
-        // Extract episode information
+        // Extract episode information with improved parsing
         episodeElements.forEach((element, index) => {
             try {
-                // Try to extract episode number from various sources
+                // Get all text content from the element and its children
+                const fullText = element.textContent || '';
+                const innerHTML = element.innerHTML || '';
+                
+                // Strategy 1: Extract episode number from "S1 E1", "S1E1", "E1", "Episode 1" patterns
                 let episodeNumber = index + 1;
                 
-                // Check data attributes
-                const dataEp = element.getAttribute('data-episode') || element.getAttribute('data-episode-number');
-                if (dataEp) {
-                    const epNum = parseInt(dataEp);
-                    if (!isNaN(epNum)) episodeNumber = epNum;
+                // Check for "S1 E1" or "S1E1" format (most common on Hoichoi)
+                const s1e1Match = fullText.match(/S\d+\s*E(\d+)|S\d+E(\d+)/i);
+                if (s1e1Match) {
+                    episodeNumber = parseInt(s1e1Match[1] || s1e1Match[2]);
+                } else {
+                    // Check data attributes
+                    const dataEp = element.getAttribute('data-episode') || 
+                                   element.getAttribute('data-episode-number') ||
+                                   element.getAttribute('data-ep') ||
+                                   element.closest('[data-episode]')?.getAttribute('data-episode');
+                    if (dataEp) {
+                        const epNum = parseInt(dataEp);
+                        if (!isNaN(epNum) && epNum > 0) episodeNumber = epNum;
+                    } else {
+                        // Check text content for episode numbers
+                        const epMatch = fullText.match(/[Ee]pisode\s*(\d+)|Ep\s*(\d+)|E\s*(\d+)|^(\d+)[\.\)]/);
+                        if (epMatch) {
+                            const epNum = parseInt(epMatch[1] || epMatch[2] || epMatch[3] || epMatch[4]);
+                            if (!isNaN(epNum) && epNum > 0) episodeNumber = epNum;
+                        }
+                    }
                 }
 
-                // Check text content for episode numbers
-                const text = element.textContent || '';
-                const epMatch = text.match(/[Ee]pisode\s*(\d+)|Ep\s*(\d+)|(\d+)/);
-                if (epMatch) {
-                    const epNum = parseInt(epMatch[1] || epMatch[2] || epMatch[3]);
-                    if (!isNaN(epNum) && epNum > 0) episodeNumber = epNum;
-                }
-
-                // Extract episode title
+                // Strategy 2: Extract episode title - look for title elements or text that looks like a title
                 let name = '';
-                const titleElement = element.querySelector('[class*="title"], [class*="name"], h3, h4, h5, h6') || element;
-                name = titleElement.textContent.trim();
                 
-                // Clean up title (remove episode number prefixes, etc.)
-                name = name.replace(/^[Ee]pisode\s*\d+[:\s-]*/i, '').trim();
-                name = name.replace(/^Ep\s*\d+[:\s-]*/i, '').trim();
-                if (!name) {
+                // Try multiple selectors for title
+                const titleSelectors = [
+                    '[class*="title"]',
+                    '[class*="Title"]',
+                    '[class*="name"]',
+                    '[class*="Name"]',
+                    'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+                    '[class*="episode-title"]',
+                    '[class*="episode-name"]',
+                    'a[href*="episode"]',
+                    'a[href*="watch"]'
+                ];
+                
+                let titleElement = null;
+                for (const selector of titleSelectors) {
+                    titleElement = element.querySelector(selector);
+                    if (titleElement) {
+                        const titleText = titleElement.textContent?.trim() || '';
+                        // Make sure it's not just "Episode 1" or similar
+                        if (titleText && !titleText.match(/^(Episode|Ep)\s*\d+$/i) && titleText.length > 3) {
+                            name = titleText;
+                            break;
+                        }
+                    }
+                }
+                
+                // If no title found, try to extract from the element's text
+                if (!name || name.length < 3) {
+                    // Split text by newlines or common separators
+                    const textLines = fullText.split(/\n|•|—|–/).map(l => l.trim()).filter(l => l.length > 0);
+                    
+                    // Look for a line that looks like a title (not episode number, not runtime, not description)
+                    for (const line of textLines) {
+                        // Skip if it's just episode number
+                        if (line.match(/^(S\d+\s*E\d+|Episode\s*\d+|Ep\s*\d+|E\d+)$/i)) continue;
+                        // Skip if it's runtime
+                        if (line.match(/^\d+m$/i) || line.match(/^\d+\s*min/i)) continue;
+                        // Skip if it's too short or too long
+                        if (line.length < 3 || line.length > 100) continue;
+                        // Skip if it contains common UI text
+                        if (line.match(/^(Watch|Play|Stream|Subscribe|Download|Share)$/i)) continue;
+                        
+                        // This might be the title
+                        name = line;
+                        // Remove language suffix like "- Hindi", "- Bengali"
+                        name = name.replace(/\s*-\s*(Hindi|Bengali|English|Tamil|Telugu|Marathi|Gujarati|Punjabi|Kannada|Malayalam)$/i, '').trim();
+                        break;
+                    }
+                }
+                
+                // Clean up title (remove episode number prefixes, language suffixes, etc.)
+                if (name) {
+                    name = name.replace(/^[Ee]pisode\s*\d+[:\s-]*/i, '').trim();
+                    name = name.replace(/^Ep\s*\d+[:\s-]*/i, '').trim();
+                    name = name.replace(/^S\d+\s*E\d+[:\s-]*/i, '').trim();
+                    name = name.replace(/\s*-\s*(Hindi|Bengali|English|Tamil|Telugu|Marathi|Gujarati|Punjabi|Kannada|Malayalam)$/i, '').trim();
+                }
+                
+                if (!name || name.length < 2) {
                     name = `Episode ${episodeNumber}`;
                 }
 
-                // Extract description/overview
+                // Strategy 3: Extract description/overview
                 let overview = '';
-                const descElement = element.querySelector('[class*="description"], [class*="overview"], [class*="synopsis"], p');
-                if (descElement) {
-                    overview = descElement.textContent.trim();
+                const descSelectors = [
+                    '[class*="description"]',
+                    '[class*="Description"]',
+                    '[class*="overview"]',
+                    '[class*="Overview"]',
+                    '[class*="synopsis"]',
+                    '[class*="Synopsis"]',
+                    '[class*="summary"]',
+                    '[class*="Summary"]',
+                    'p',
+                    '[class*="episode-description"]',
+                    '[class*="episode-overview"]'
+                ];
+                
+                for (const selector of descSelectors) {
+                    const descElement = element.querySelector(selector);
+                    if (descElement) {
+                        const descText = descElement.textContent?.trim() || '';
+                        // Look for description-like text (longer than title, shorter than 500 chars)
+                        if (descText.length > 20 && descText.length < 500 && 
+                            !descText.match(/^(S\d+\s*E\d+|Episode\s*\d+|Ep\s*\d+)$/i) &&
+                            !descText.match(/^\d+m$/i) &&
+                            descText !== name) {
+                            overview = descText;
+                            break;
+                        }
+                    }
+                }
+                
+                // If no description found in specific elements, try to extract from full text
+                if (!overview) {
+                    const textLines = fullText.split(/\n|•|—|–/).map(l => l.trim()).filter(l => l.length > 0);
+                    for (const line of textLines) {
+                        // Skip episode number, title, runtime
+                        if (line.match(/^(S\d+\s*E\d+|Episode\s*\d+|Ep\s*\d+|E\d+)$/i)) continue;
+                        if (line === name) continue;
+                        if (line.match(/^\d+m$/i) || line.match(/^\d+\s*min/i)) continue;
+                        // Look for description-like text
+                        if (line.length > 30 && line.length < 500 && 
+                            !line.match(/^(Watch|Play|Stream|Subscribe|Download|Share)$/i)) {
+                            overview = line;
+                            break;
+                        }
+                    }
                 }
 
-                // Extract air date (if available)
+                // Strategy 4: Extract runtime from "9m", "9 min", "9 minutes" format
+                let runtime = null;
+                const runtimePatterns = [
+                    /(\d+)\s*m\b/i,  // "9m", "9 m"
+                    /(\d+)\s*min/i,  // "9 min", "9 minutes"
+                    /(\d+)\s*minutes?/i  // "9 minute", "9 minutes"
+                ];
+                
+                for (const pattern of runtimePatterns) {
+                    const runtimeMatch = fullText.match(pattern);
+                    if (runtimeMatch) {
+                        runtime = parseInt(runtimeMatch[1]);
+                        break;
+                    }
+                }
+                
+                // Also check in specific runtime elements
+                if (!runtime) {
+                    const runtimeElement = element.querySelector('[class*="runtime"], [class*="duration"], [class*="time"], [class*="Runtime"], [class*="Duration"]');
+                    if (runtimeElement) {
+                        const runtimeText = runtimeElement.textContent || '';
+                        for (const pattern of runtimePatterns) {
+                            const runtimeMatch = runtimeText.match(pattern);
+                            if (runtimeMatch) {
+                                runtime = parseInt(runtimeMatch[1]);
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // Strategy 5: Extract air date (if available)
                 let airDate = '';
-                const dateElement = element.querySelector('[class*="date"], [class*="release"], time');
+                const dateElement = element.querySelector('[class*="date"], [class*="release"], [class*="Date"], [class*="Release"], time');
                 if (dateElement) {
                     const dateText = dateElement.textContent || dateElement.getAttribute('datetime') || '';
-                    // Try to parse date
+                    // Try to parse date in various formats
                     const dateMatch = dateText.match(/(\d{4}[-/]\d{1,2}[-/]\d{1,2})|(\d{1,2}[-/]\d{1,2}[-/]\d{4})/);
                     if (dateMatch) {
                         airDate = dateMatch[0];
                     }
                 }
 
-                // Extract runtime (if available)
-                let runtime = null;
-                const runtimeElement = element.querySelector('[class*="runtime"], [class*="duration"], [class*="time"]');
-                if (runtimeElement) {
-                    const runtimeText = runtimeElement.textContent || '';
-                    const runtimeMatch = runtimeText.match(/(\d+)\s*(?:min|minutes?|mins?)/i);
-                    if (runtimeMatch) {
-                        runtime = parseInt(runtimeMatch[1]);
-                    }
+                // Only add episode if we have at least a valid episode number
+                if (episodeNumber > 0) {
+                    episodes.push({
+                        episodeNumber: episodeNumber,
+                        name: name,
+                        overview: overview,
+                        airDate: airDate,
+                        runtime: runtime || 0,
+                        isHoichoiOnly: true,
+                        descriptionSource: 'Hoichoi'
+                    });
+                    
+                    log(`Parsed Episode ${episodeNumber}: "${name}" (${runtime || 0}m, ${overview.length} chars description)`);
                 }
-
-                episodes.push({
-                    episodeNumber: episodeNumber,
-                    name: name,
-                    overview: overview,
-                    airDate: airDate,
-                    runtime: runtime || 0,
-                    isHoichoiOnly: true,
-                    descriptionSource: 'Hoichoi'
-                });
 
             } catch (error) {
                 log(`Error parsing episode element ${index}:`, error);
@@ -5329,7 +5494,7 @@
     
     window.tvdbHelperTest = function() {
         console.log('🧪 TVDB Helper Test Function');
-        console.log('Script version: 1.6.9');
+        console.log('Script version: 1.7.0');
         console.log('Current step:', getCurrentStep());
         console.log('Document ready:', document.readyState);
         console.log('Body exists:', !!document.body);
