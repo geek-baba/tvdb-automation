@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TVDB Workflow Helper - Complete
 // @namespace    tvdb.workflow
-// @version      1.6.4
+// @version      1.6.5
 // @description  Complete TVDB 5-step workflow helper with TMDB/OMDb/Hoichoi integration and flexible data source modes
 // @author       you
 // @match        https://thetvdb.com/series/create*
@@ -29,7 +29,7 @@
     'use strict';
 
     // Immediate console logs to verify script is running
-    console.log('🎬 TVDB Workflow Helper v1.6.4 - Script file loaded');
+    console.log('🎬 TVDB Workflow Helper v1.6.5 - Script file loaded');
     console.log('📍 Current URL:', window.location.href);
     console.log('📍 Current pathname:', window.location.pathname);
     console.log('📋 Complete 5-step TVDB submission automation');
@@ -922,8 +922,16 @@
                         <select id="tvdb-translation-source" style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: #333; color: #fff; font-size: 12px;">
                             <option value="tmdb">TMDB (Recommended)</option>
                             <option value="omdb">OMDb</option>
+                            <option value="hoichoi">Hoichoi (Use fetched data)</option>
                             <option value="manual">Manual Entry</option>
                         </select>
+                    </div>
+
+                    <div id="tvdb-hoichoi-translation-note" style="margin-bottom: 15px; display: none;">
+                        <div style="background: #2a3a4a; padding: 8px; border-radius: 4px; border-left: 3px solid #9C27B0; font-size: 11px; color: #ccc;">
+                            <div style="color: #9C27B0; font-weight: bold; margin-bottom: 4px;">📺 Hoichoi Translation Note</div>
+                            <div>Hoichoi shows are typically in regional languages. English translations should be fetched from TMDB or OMDb. This option uses already-fetched Hoichoi data from Step 1/2.</div>
+                        </div>
                     </div>
 
                     <div style="margin-bottom: 15px;">
@@ -1140,6 +1148,17 @@
             case 'step5':
                 const fetchTranslationBtn = document.getElementById('tvdb-fetch-translation');
                 if (fetchTranslationBtn) fetchTranslationBtn.onclick = fetchTranslation;
+                
+                // Translation source selector for Step 5
+                const translationSourceSelect = document.getElementById('tvdb-translation-source');
+                if (translationSourceSelect) {
+                    translationSourceSelect.onchange = function() {
+                        const hoichoiNote = document.getElementById('tvdb-hoichoi-translation-note');
+                        if (hoichoiNote) {
+                            hoichoiNote.style.display = this.value === 'hoichoi' ? 'block' : 'none';
+                        }
+                    };
+                }
                 break;
         }
     }
@@ -4112,6 +4131,17 @@
                     log('❌ No OMDb data available');
                     updateStatus('No OMDb data available. Please fetch data first.');
                 }
+            } else if (translationSource === 'hoichoi') {
+                // Use already-fetched Hoichoi data
+                if (window.tvdbFetchedData && window.tvdbFetchedData.tmdb && window.tvdbFetchedData.tmdb.isHoichoiOnly) {
+                    const hoichoiData = window.tvdbFetchedData.tmdb;
+                    log(`Using Hoichoi data: name="${hoichoiData.name}", overview="${hoichoiData.overview ? hoichoiData.overview.substring(0, 50) + '...' : 'None'}"`);
+                    fillTranslationFields(hoichoiData.name || hoichoiData.originalName, hoichoiData.overview);
+                    updateStatus('⚠️ Hoichoi data applied (original language). For English, use TMDB or OMDb source.');
+                } else {
+                    log('❌ No Hoichoi data available');
+                    updateStatus('No Hoichoi data available. Please fetch Hoichoi data in Step 1/2 first, or use TMDB/OMDb for English translations.');
+                }
             } else {
                 log('❌ No translation data available');
                 updateStatus('No translation data available. Please fetch translation first.');
@@ -4621,7 +4651,8 @@
         const imdbId = window.tvdbFetchedData?.imdbId || document.getElementById('tvdb-imdb-id-step3')?.value;
         const translationSource = document.getElementById('tvdb-translation-source')?.value || 'tmdb';
 
-        if (!tmdbId && !imdbId) {
+        // For Hoichoi, we don't need TMDB/IMDb ID - we use already-fetched data
+        if (translationSource !== 'hoichoi' && !tmdbId && !imdbId) {
             updateStatus('Please provide TMDB ID or IMDb ID first');
             return;
         }
@@ -4661,6 +4692,21 @@
                     }
                 } else {
                     throw new Error(`OMDb API error: ${response.status}`);
+                }
+            } else if (translationSource === 'hoichoi') {
+                // Use already-fetched Hoichoi data
+                if (window.tvdbFetchedData && window.tvdbFetchedData.tmdb && window.tvdbFetchedData.tmdb.isHoichoiOnly) {
+                    const hoichoiData = window.tvdbFetchedData.tmdb;
+                    translationData = {
+                        name: hoichoiData.name || hoichoiData.originalName || '',
+                        overview: hoichoiData.overview || '',
+                        source: 'Hoichoi (Original Language)'
+                    };
+                    log(`Using Hoichoi data: ${translationData.name}`);
+                    updateStatus('⚠️ Hoichoi data is in original language. For English translation, please use TMDB or OMDb source.');
+                } else {
+                    updateStatus('No Hoichoi data found. Please fetch Hoichoi data in Step 1 or Step 2 first, or use TMDB/OMDb for English translations.');
+                    return;
                 }
             }
 
@@ -4719,7 +4765,7 @@
     
     window.tvdbHelperTest = function() {
         console.log('🧪 TVDB Helper Test Function');
-        console.log('Script version: 1.6.4');
+        console.log('Script version: 1.6.5');
         console.log('Current step:', getCurrentStep());
         console.log('Document ready:', document.readyState);
         console.log('Body exists:', !!document.body);
