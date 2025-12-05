@@ -4,6 +4,8 @@
 // @version      1.9.5
 // @description  Complete TVDB 5-step workflow helper with TMDB/OMDb/Hoichoi integration and flexible data source modes
 // @author       you
+// @updateURL    https://raw.githubusercontent.com/geek-baba/tvdb-automation/main/src/tvdb-workflow-complete.user.js
+// @downloadURL  https://raw.githubusercontent.com/geek-baba/tvdb-automation/main/src/tvdb-workflow-complete.user.js
 // @match        https://thetvdb.com/series/create*
 // @match        https://thetvdb.com/series/create-step2*
 // @match        https://thetvdb.com/series/*/seasons/official/*/bulkadd*
