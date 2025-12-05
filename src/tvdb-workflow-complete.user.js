@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TVDB Workflow Helper - Complete
 // @namespace    tvdb.workflow
-// @version      1.8.0
+// @version      1.8.1
 // @description  Complete TVDB 5-step workflow helper with TMDB/OMDb/Hoichoi integration and flexible data source modes
 // @author       you
 // @match        https://thetvdb.com/series/create*
@@ -5089,18 +5089,64 @@ Or simple text format:
         const rows = gatherRows();
         const count = Math.min(25, Math.min(rows.length, eps.length));
 
-        for (let i = 0; i < count; i++) {
+        log(`Filling ${count} episodes into ${rows.length} rows...`);
+
+        // Strategy: Fill episode numbers first, then match and fill details
+        // This prevents overwriting when DOM order doesn't match episode order
+        
+        // Step 1: Fill episode numbers sequentially into rows
+        for (let i = 0; i < count && i < rows.length; i++) {
             const row = rows[i];
             const ep = eps[i];
             if (!row || !ep) continue;
-            fillRow(row, {
+            
+            const numEl = inputByLabelWithin(row, 'Episode #');
+            if (numEl) {
+                numEl.value = String(ep.episode_number);
+                fire(numEl, 'input');
+                fire(numEl, 'change');
+            }
+            await sleep(50); // Small delay between number fills
+        }
+        
+        // Wait for form to update after filling episode numbers
+        await sleep(300);
+        
+        // Step 2: Re-gather rows (order might have changed) and match episodes by number
+        const updatedRows = gatherRows();
+        log(`Re-gathered ${updatedRows.length} rows after filling episode numbers`);
+        
+        for (let i = 0; i < count; i++) {
+            const ep = eps[i];
+            if (!ep) continue;
+            
+            // Find the row that has this episode number
+            let targetRow = null;
+            for (const row of updatedRows) {
+                const numEl = inputByLabelWithin(row, 'Episode #');
+                if (numEl && numEl.value && parseInt(numEl.value) === ep.episode_number) {
+                    targetRow = row;
+                    break;
+                }
+            }
+            
+            if (!targetRow) {
+                log(`⚠️ Could not find row with episode number ${ep.episode_number}`);
+                continue;
+            }
+            
+            // Fill the rest of the episode data
+            fillRow(targetRow, {
                 num: ep.episode_number,
                 name: ep.name,
                 overview: ep.overview,
                 date: ep.air_date,
                 runtime: ep.runtime || seasonAvg
             });
+            
+            await sleep(50); // Small delay between fills
         }
+        
         log(`Episodes filled (TMDB). Review, tweak, submit.`);
     }
 
