@@ -5143,17 +5143,25 @@ Or simple text format:
             
             // Verify we're filling into the right row by checking if it's empty or has the expected episode number
             const numEl = inputByLabelWithin(row, 'Episode #');
+            const nameEl = inputByLabelWithin(row, 'Name');
             const currentNum = numEl ? (numEl.value ? parseInt(numEl.value) : null) : null;
+            const currentName = nameEl ? nameEl.value : '';
             
-            if (currentNum && currentNum !== ep.episode_number && currentNum !== (i + 1)) {
-                log(`⚠️ Row ${i} already has episode # ${currentNum}, but we want ${ep.episode_number}. Skipping to avoid overwrite.`);
+            // Check if this row already has a different episode filled
+            if (currentNum && currentNum !== ep.episode_number && currentName && currentName.trim().length > 0) {
+                log(`⚠️ Row ${i} already has Episode ${currentNum} "${currentName}", but we want Episode ${ep.episode_number}. Looking for empty row...`);
+                
                 // Try to find an empty row instead
                 let foundEmptyRow = false;
                 for (let r = 0; r < rows.length; r++) {
                     const checkRow = rows[r];
                     const checkNumEl = inputByLabelWithin(checkRow, 'Episode #');
+                    const checkNameEl = inputByLabelWithin(checkRow, 'Name');
                     const checkNum = checkNumEl ? (checkNumEl.value ? parseInt(checkNumEl.value) : null) : null;
-                    if (!checkNum || checkNum === 0 || checkNum === '') {
+                    const checkName = checkNameEl ? checkNameEl.value : '';
+                    
+                    // Row is empty if episode number is empty/0 and name is empty
+                    if ((!checkNum || checkNum === 0 || checkNum === '') && (!checkName || checkName.trim().length === 0)) {
                         log(`📊 Found empty row at index ${r}, using it for Episode ${ep.episode_number}`);
                         fillRow(checkRow, {
                             num: ep.episode_number,
@@ -5166,8 +5174,9 @@ Or simple text format:
                         break;
                     }
                 }
+                
                 if (!foundEmptyRow) {
-                    log(`⚠️ No empty row found, filling into row ${i} anyway`);
+                    log(`⚠️ No empty row found. Row ${i} has Episode ${currentNum}, but we'll fill Episode ${ep.episode_number} anyway (may overwrite)`);
             fillRow(row, {
                 num: ep.episode_number,
                 name: ep.name,
@@ -5177,7 +5186,8 @@ Or simple text format:
             });
         }
             } else {
-                log(`📊 [${i+1}/${count}] Filling row ${i} (current: ${currentNum || 'empty'}) with Episode ${ep.episode_number}: "${ep.name}"`);
+                // Row is empty or has matching episode number - safe to fill
+                log(`📊 [${i+1}/${count}] Filling row ${i} (current: Ep ${currentNum || 'empty'}) with Episode ${ep.episode_number}: "${ep.name}"`);
                 fillRow(row, {
                     num: ep.episode_number,
                     name: ep.name,
