@@ -2347,8 +2347,8 @@ Or simple text format:
                     // Try parsing text format like:
                     // 1. Title | 9m | Description
                     // 2. Title | 9m | Description
-                
-                for (const line of lines) {
+                    
+                    for (const line of lines) {
                     // Try pattern: "1. Title - Hindi | 9m | Description"
                     // Or: "S1 E1: Title - Hindi | 9m | Description"
                     // Or: "Episode 1: Title - Hindi | 9m | Description"
@@ -2413,9 +2413,10 @@ Or simple text format:
                             });
                         }
                     });
+                    }
+                    
+                    log(`✅ Parsed ${episodes.length} episodes from text format`);
                 }
-                
-                log(`✅ Parsed ${episodes.length} episodes from text format`);
             }
             
             if (episodes.length === 0) {
