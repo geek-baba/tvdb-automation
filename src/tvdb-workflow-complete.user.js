@@ -2127,6 +2127,11 @@
                 episodes = parseHoichoiEpisodes(html, parseInt(seasonNum));
             }
             
+            // If still no episodes, throw error
+            if (!episodes || episodes.length === 0) {
+                throw new Error('No episodes found. Please open the Hoichoi show page in your browser and try again, or check the console for detailed logs.');
+            }
+            
             log(`📊 Parsing result: ${episodes.length} episodes found`);
             if (episodes.length > 0) {
                 log(`📊 First episode sample:`, JSON.stringify(episodes[0], null, 2));
