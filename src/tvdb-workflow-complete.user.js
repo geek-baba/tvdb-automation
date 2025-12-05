@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         TVDB Workflow Helper - Complete
 // @namespace    tvdb.workflow
-// @version      1.5.0
-// @description  Complete TVDB 5-step workflow helper with TMDB/OMDb integration and flexible OMDb-only mode
+// @version      1.6.0
+// @description  Complete TVDB 5-step workflow helper with TMDB/OMDb/Hoichoi integration and flexible data source modes
 // @author       you
 // @match        https://thetvdb.com/series/create*
 // @match        https://thetvdb.com/series/create-step2*
@@ -14,6 +14,8 @@
 // @grant        GM_getValue
 // @connect      api.themoviedb.org
 // @connect      www.omdbapi.com
+// @connect      www.hoichoi.tv
+// @connect      image.hoichoicdn.com
 // @connect      libretranslate.com
 // @connect      libretranslate.de
 // @connect      api.mymemory.translated.net
@@ -22,9 +24,9 @@
 (function() {
     'use strict';
 
-    console.log('🎬 TVDB Workflow Helper v1.5.0 - Production Ready');
+    console.log('🎬 TVDB Workflow Helper v1.6.0 - Production Ready');
     console.log('📋 Complete 5-step TVDB submission automation');
-    console.log('🔧 TMDB + OMDb integration with flexible OMDb-only mode (Steps 1, 2 & 3)');
+    console.log('🔧 TMDB + OMDb + Hoichoi integration with flexible data source modes');
 
     // Configuration and state
     const CONFIG = {
@@ -518,6 +520,7 @@
                         <select id="tvdb-data-source" style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: #333; color: white; margin-bottom: 10px;">
                             <option value="tmdb">TMDB (Recommended)</option>
                             <option value="omdb">OMDb Only (IMDb ID)</option>
+                            <option value="hoichoi">Hoichoi (URL)</option>
                         </select>
                     </div>
 
@@ -535,6 +538,16 @@
                                value="${context.imdbId}">
                         <div style="font-size: 10px; color: #999; margin-bottom: 10px;">
                             ⚠️ OMDb-only mode: Limited data available, no episode descriptions
+                        </div>
+                    </div>
+
+                    <div id="tvdb-hoichoi-fields" style="margin-bottom: 15px; display: none;">
+                        <label style="display: block; margin-bottom: 5px; color: #ccc;">Hoichoi Show URL:</label>
+                        <input type="text" id="tvdb-hoichoi-url" placeholder="e.g., https://www.hoichoi.tv/shows/chill-dil-hoichoi-mini"
+                               style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: #333; color: white; margin-bottom: 5px;"
+                               value="">
+                        <div style="font-size: 10px; color: #999; margin-bottom: 10px;">
+                            ⚠️ Hoichoi mode: Official site will be set to this URL
                         </div>
                     </div>
 
@@ -896,12 +909,20 @@
                     dataSourceSelect.onchange = function() {
                         const tmdbFields = document.getElementById('tvdb-tmdb-fields');
                         const omdbFields = document.getElementById('tvdb-omdb-fields');
+                        const hoichoiFields = document.getElementById('tvdb-hoichoi-fields');
+                        
                         if (this.value === 'omdb') {
                             if (tmdbFields) tmdbFields.style.display = 'none';
                             if (omdbFields) omdbFields.style.display = 'block';
+                            if (hoichoiFields) hoichoiFields.style.display = 'none';
+                        } else if (this.value === 'hoichoi') {
+                            if (tmdbFields) tmdbFields.style.display = 'none';
+                            if (omdbFields) omdbFields.style.display = 'none';
+                            if (hoichoiFields) hoichoiFields.style.display = 'block';
                         } else {
                             if (tmdbFields) tmdbFields.style.display = 'block';
                             if (omdbFields) omdbFields.style.display = 'none';
+                            if (hoichoiFields) hoichoiFields.style.display = 'none';
                         }
                     };
                 }
@@ -1706,6 +1727,9 @@
         if (dataSource === 'omdb') {
             // OMDb-only mode
             await fetchDataOmdbOnly();
+        } else if (dataSource === 'hoichoi') {
+            // Hoichoi mode
+            await fetchDataHoichoi();
         } else {
             // TMDB mode (original behavior)
             await fetchDataTmdb();
@@ -1855,6 +1879,62 @@
         }
     }
 
+    // Fetch data using Hoichoi (HTML scraping)
+    async function fetchDataHoichoi() {
+        const hoichoiUrl = document.getElementById('tvdb-hoichoi-url').value.trim();
+
+        if (!hoichoiUrl) {
+            updateStatus('Please enter a Hoichoi show URL');
+            return;
+        }
+
+        // Validate URL format
+        if (!hoichoiUrl.includes('hoichoi.tv/shows/')) {
+            updateStatus('Invalid Hoichoi URL. Expected format: https://www.hoichoi.tv/shows/show-slug');
+            return;
+        }
+
+        updateStatus('Fetching data from Hoichoi...');
+        log('Starting Hoichoi fetch for URL:', hoichoiUrl);
+
+        try {
+            // Fetch and scrape Hoichoi show
+            const tvdbData = await fetchHoichoiShow(hoichoiUrl);
+
+            // Create simplified data for compatibility
+            const omdbData = null; // No OMDb data for Hoichoi
+
+            // Update context
+            context.tmdbId = ''; // No TMDB ID in Hoichoi mode
+            context.imdbId = null; // No IMDb ID
+            context.originalIso1 = tvdbData.originalLanguage;
+            context.step = 'step1';
+
+            // Store fetched data
+            window.tvdbFetchedData = {
+                tmdb: tvdbData,
+                omdb: omdbData,
+                imdbId: null,
+                tmdbId: '', // No TMDB ID
+                officialSite: hoichoiUrl, // Use Hoichoi URL as official site
+                isHoichoiOnly: true
+            };
+
+            // Update preview
+            updatePreview(generateStep1Preview(tvdbData, omdbData, null));
+
+            // Update status
+            updateStatus(`Hoichoi data fetched successfully! Official site set to: ${hoichoiUrl}`);
+
+            saveConfig();
+            log('Hoichoi fetch completed', window.tvdbFetchedData);
+
+        } catch (error) {
+            updateStatus(`Error fetching Hoichoi data: ${error.message}`);
+            log('Error fetching Hoichoi data:', error);
+        }
+    }
+
     // Generate step 2 preview
     function generateStep2Preview(tmdbData, omdbData) {
         // Check if overview appears to be translated or in original language
@@ -1903,17 +1983,30 @@
             </div>`;
         }
 
+        // Check if this is Hoichoi-only mode
+        if (tmdbData && tmdbData.isHoichoiOnly) {
+            html += `<div style="background: #3a2a4a; padding: 8px; border-radius: 4px; margin-bottom: 10px; border-left: 3px solid #9C27B0;">
+                <div style="color: #9C27B0; font-weight: bold; margin-bottom: 5px;">📺 Hoichoi Mode</div>
+                <div style="font-size: 11px; color: #ccc;">Data scraped from Hoichoi.tv. Official site will be set to Hoichoi URL.</div>
+            </div>`;
+        }
+
         if (tmdbData) {
             const originalLangName = LANGUAGE_NAMES[tmdbData.originalLanguage] || tmdbData.originalLanguage;
-            const dataSource = tmdbData.isOmdbOnly ? 'OMDb' : 'TMDB';
+            let dataSource = 'TMDB';
+            if (tmdbData.isOmdbOnly) dataSource = 'OMDb';
+            else if (tmdbData.isHoichoiOnly) dataSource = 'Hoichoi';
+            
             html += `<div><strong>${dataSource} Title:</strong> ${tmdbData.name} (${tmdbData.year})</div>`;
-            if (!tmdbData.isOmdbOnly) {
+            if (!tmdbData.isOmdbOnly && !tmdbData.isHoichoiOnly) {
                 html += `<div><strong>TMDB Original:</strong> ${tmdbData.originalName} (${tmdbData.year})</div>`;
             }
             html += `<div><strong>Original Language:</strong> ${originalLangName} (${tmdbData.originalLanguage})</div>`;
-            html += `<div><strong>IMDb ID:</strong> ${imdbId || 'Not found'}</div>`;
+            if (!tmdbData.isHoichoiOnly) {
+                html += `<div><strong>IMDb ID:</strong> ${imdbId || 'Not found'}</div>`;
+            }
             if (tmdbData.homepage) {
-                html += `<div><strong>Official Site:</strong> ${tmdbData.homepage}</div>`;
+                html += `<div><strong>Official Site:</strong> <a href="${tmdbData.homepage}" target="_blank" style="color: #4CAF50;">${tmdbData.homepage}</a></div>`;
             }
             if (tmdbData.overview) {
                 html += `<div><strong>Overview:</strong> ${tmdbData.overview.substring(0, 150)}...</div>`;
@@ -1924,12 +2017,12 @@
             }
         }
 
-        if (omdbData && !tmdbData.isOmdbOnly) {
+        if (omdbData && !tmdbData.isOmdbOnly && !tmdbData.isHoichoiOnly) {
             html += `<div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #444;">`;
             html += `<div><strong>IMDb Title:</strong> ${omdbData.title} (${omdbData.year})</div>`;
             html += `<div><strong>IMDb Language:</strong> ${omdbData.language}</div>`;
             html += `</div>`;
-        } else if (!omdbData && !tmdbData.isOmdbOnly) {
+        } else if (!omdbData && !tmdbData.isOmdbOnly && !tmdbData.isHoichoiOnly) {
             html += `<div><strong>IMDb Data:</strong> Not available from OMDb</div>`;
         }
 
@@ -2405,6 +2498,225 @@
             runtime: omdbData.Runtime && omdbData.Runtime !== 'N/A' ? parseInt(omdbData.Runtime) : null,
             rating: omdbData.imdbRating && omdbData.imdbRating !== 'N/A' ? omdbData.imdbRating : null,
             isOmdbOnly: true // Flag to indicate this is OMDb-only data
+        };
+    }
+
+    // ============================================================
+    // Hoichoi Scraper Functions
+    // ============================================================
+
+    // Fetch and scrape Hoichoi show page
+    async function fetchHoichoiShow(url) {
+        try {
+            log(`🔍 Fetching Hoichoi show from: ${url}`);
+            updateStatus('Fetching data from Hoichoi...');
+
+            // Validate URL
+            if (!url || !url.includes('hoichoi.tv/shows/')) {
+                throw new Error('Invalid Hoichoi URL. Expected format: https://www.hoichoi.tv/shows/show-slug');
+            }
+
+            // Fetch page HTML
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error(`Failed to fetch page: ${response.status} ${response.statusText}`);
+            }
+
+            const html = await response.text();
+            log('✅ Page HTML fetched');
+
+            // Parse the page
+            const scrapedData = parseHoichoiPage(html, url);
+            log('✅ Page parsed successfully');
+
+            // Convert to TVDB format
+            const tvdbData = convertHoichoiToTvdbFormat(scrapedData, url);
+            log('✅ Data converted to TVDB format');
+
+            return tvdbData;
+
+        } catch (error) {
+            log(`❌ Error fetching Hoichoi show: ${error.message}`);
+            throw error;
+        }
+    }
+
+    // Parse Hoichoi page HTML to extract show data
+    function parseHoichoiPage(html, url) {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+
+        // Extract title from page title or h1
+        let title = '';
+        const pageTitle = doc.querySelector('title');
+        if (pageTitle) {
+            // Page title format: "Watch Chill Dil | Hindi Web Series | hoichoi"
+            const titleMatch = pageTitle.textContent.match(/Watch\s+(.+?)\s*\||(.+?)\s*\|/);
+            if (titleMatch) {
+                title = (titleMatch[1] || titleMatch[2]).trim();
+            }
+        }
+        
+        // Fallback: try h1 or other title elements
+        if (!title) {
+            const titleElement = doc.querySelector('h1') || doc.querySelector('[class*="title"]');
+            if (titleElement) {
+                title = titleElement.textContent.trim();
+                // Remove language indicator like "(Hindi)" from title
+                title = title.replace(/\s*\([^)]+\)\s*$/, '').trim();
+            }
+        }
+
+        // Extract description/overview from meta tags
+        let description = '';
+        const metaDesc = doc.querySelector('meta[name="description"], meta[property="og:description"]');
+        if (metaDesc) {
+            description = metaDesc.getAttribute('content') || metaDesc.getAttribute('property') || '';
+        }
+        
+        // Try to find description in page content (look for longer text blocks)
+        if (!description || description.length < 50) {
+            const descElements = doc.querySelectorAll('p, div, [class*="description"], [class*="synopsis"], [class*="overview"]');
+            for (const el of descElements) {
+                const text = el.textContent.trim();
+                // Look for description-like text (50-1000 chars, not too short)
+                if (text.length > 50 && text.length < 1000 && 
+                    !text.includes('Subscribe') && 
+                    !text.includes('Watch') &&
+                    !text.includes('Season')) {
+                    description = text;
+                    break;
+                }
+            }
+        }
+
+        // Extract year and genres from metadata pattern: "U • 1 Season • 2024 • Romantic | Comedy"
+        let year = '';
+        let genres = [];
+        let language = 'bn'; // Default to Bengali
+        
+        // Look for metadata pattern in HTML
+        const metadataPattern = /([A-Z])\s*•\s*(\d+\s+Season)?\s*•\s*(\d{4})\s*•\s*([^•]+)/i;
+        const metadataMatch = html.match(metadataPattern);
+        
+        if (metadataMatch) {
+            year = metadataMatch[3] || '';
+            const genresText = metadataMatch[4] || '';
+            // Split genres by | and clean up
+            genres = genresText.split('|').map(g => g.trim()).filter(Boolean);
+        } else {
+            // Fallback: extract year from anywhere in HTML
+            const yearPattern = /\b(20\d{2}|19\d{2})\b/;
+            const yearMatches = html.match(yearPattern);
+            if (yearMatches) {
+                // Prefer recent years (2000+)
+                year = yearMatches.find(y => parseInt(y) >= 2000) || yearMatches[0];
+            }
+            
+            // Fallback: extract genres from common patterns
+            const genrePattern = /(Romantic|Comedy|Drama|Thriller|Action|Horror|Sci-Fi|Fantasy|Crime|Mystery|Adventure|Family|Animation|Documentary|Romance)[^|]*/gi;
+            const genreMatches = html.match(genrePattern);
+            if (genreMatches) {
+                genres = [...new Set(genreMatches.map(g => g.trim()))];
+            }
+        }
+
+        // Extract language from title, metadata, or page
+        const langPatterns = [
+            /\(Hindi\)/i,
+            /\(Bengali\)/i,
+            /\(English\)/i,
+            /\(Tamil\)/i,
+            /\(Telugu\)/i,
+            /Hindi\s+Web\s+Series/i,
+            /Bengali\s+Web\s+Series/i
+        ];
+        
+        for (const pattern of langPatterns) {
+            const match = html.match(pattern);
+            if (match) {
+                const langText = match[0].toLowerCase();
+                if (langText.includes('hindi')) { language = 'hi'; break; }
+                else if (langText.includes('bengali')) { language = 'bn'; break; }
+                else if (langText.includes('english')) { language = 'en'; break; }
+                else if (langText.includes('tamil')) { language = 'ta'; break; }
+                else if (langText.includes('telugu')) { language = 'te'; break; }
+            }
+        }
+
+        // Extract poster/image URL (prefer larger images)
+        let posterUrl = '';
+        // Look for og:image meta tag first
+        const ogImage = doc.querySelector('meta[property="og:image"]');
+        if (ogImage) {
+            posterUrl = ogImage.getAttribute('content') || '';
+        }
+        
+        // Fallback: find image URLs in HTML
+        if (!posterUrl) {
+            const imagePatterns = [
+                /image\.hoichoicdn\.com[^"'\s]+1280x720[^"'\s]+/i,  // Prefer 1280x720
+                /image\.hoichoicdn\.com[^"'\s]+/i  // Any hoichoi image
+            ];
+            
+            for (const pattern of imagePatterns) {
+                const imageMatch = html.match(pattern);
+                if (imageMatch) {
+                    posterUrl = 'https://' + imageMatch[0];
+                    break;
+                }
+            }
+        }
+
+        log(`📊 Parsed Hoichoi data: Title="${title}", Year="${year}", Language="${language}", Genres=[${genres.join(', ')}]`);
+
+        return {
+            title: title,
+            description: description,
+            year: year,
+            genres: genres,
+            language: language,
+            posterUrl: posterUrl,
+            url: url
+        };
+    }
+
+    // Convert Hoichoi scraped data to TMDB-compatible format
+    function convertHoichoiToTvdbFormat(scrapedData, url) {
+        // Map Hoichoi language to ISO code
+        const langMap = {
+            'hi': 'hi', // Hindi
+            'bn': 'bn', // Bengali
+            'en': 'en', // English
+            'ta': 'ta', // Tamil
+            'te': 'te'  // Telugu
+        };
+
+        const originalLanguage = langMap[scrapedData.language] || 'bn';
+
+        // Parse genres - convert to array format
+        let genres = [];
+        if (Array.isArray(scrapedData.genres)) {
+            genres = scrapedData.genres;
+        } else if (typeof scrapedData.genres === 'string') {
+            genres = scrapedData.genres.split('|').map(g => g.trim()).filter(Boolean);
+        }
+
+        return {
+            name: scrapedData.title || '',
+            originalName: scrapedData.title || '',
+            overview: scrapedData.description || '',
+            year: scrapedData.year || '',
+            originalLanguage: originalLanguage,
+            genres: genres,
+            status: 'Ended', // Default, can be updated if we find status info
+            originCountry: ['IN'], // India (Hoichoi is Indian platform)
+            imdbId: null,
+            homepage: url,
+            runtime: null,
+            rating: null,
+            isHoichoiOnly: true,
+            posterUrl: scrapedData.posterUrl || ''
         };
     }
 
