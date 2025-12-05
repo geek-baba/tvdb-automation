@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TVDB Workflow Helper - Complete
 // @namespace    tvdb.workflow
-// @version      1.9.3
+// @version      1.9.4
 // @description  Complete TVDB 5-step workflow helper with TMDB/OMDb/Hoichoi integration and flexible data source modes
 // @author       you
 // @match        https://thetvdb.com/series/create*
@@ -3164,10 +3164,34 @@
         );
         
         // Use gatherRows() to count actual episode rows (not just textareas)
-        // This ensures we only count rows that have "First Aired" label
-        // and excludes any other textareas on the page (including UI panel)
-        const rows = gatherRows();
-        const have = rows.length;
+        let rows = gatherRows();
+        let have = rows.length;
+        
+        // Workaround: Count visible Episode # inputs as a more reliable check
+        // If gatherRows() finds 2 but we only see 1 visible Episode # input, use 1
+        const episodeInputs = Array.from(document.querySelectorAll('input')).filter(input => {
+            // Find the parent container
+            let container = input.closest('div, tr, form, fieldset');
+            if (!container) container = input.parentElement;
+            
+            // Check if this container has an "Episode #" label
+            const labels = Array.from(container.querySelectorAll('label') || []);
+            return labels.some(l => /episode\s*#/i.test(l.textContent || ''));
+        });
+        
+        // Filter to only visible inputs
+        const visibleEpisodeInputs = episodeInputs.filter(input => {
+            const rect = input.getBoundingClientRect();
+            const style = window.getComputedStyle(input);
+            return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+        });
+        
+        // If we have a mismatch, trust the visible count
+        if (have !== visibleEpisodeInputs.length && visibleEpisodeInputs.length > 0) {
+            log(`ensureRows: Mismatch detected - gatherRows() found ${have} rows but ${visibleEpisodeInputs.length} visible Episode # inputs. Using visible count.`);
+            have = visibleEpisodeInputs.length;
+        }
+        
         const need = Math.min(25, n);
         
         log(`ensureRows: have=${have}, need=${need}, will create ${Math.max(0, need - have)} rows`);
@@ -3196,13 +3220,24 @@
         for (const ta of tas) {
             let p = ta;
             for (let i = 0; i < 6 && p; i++) {
+                // Look for Episode # input field - more unique identifier than "First Aired"
+                const episodeInput = Array.from(p.querySelectorAll('input')).find(input => {
+                    const labels = Array.from(p.querySelectorAll('label'));
+                    return labels.some(l => /episode\s*#/i.test(l.textContent || ''));
+                });
+                
+                // Also check for "First Aired" label as fallback
                 const labels = Array.from(p.querySelectorAll('label'));
-                if (labels.some(l => /first aired/i.test(l.textContent || ''))) {
+                const hasFirstAired = labels.some(l => /first aired/i.test(l.textContent || ''));
+                const hasEpisodeNum = episodeInput !== undefined;
+                
+                // Require BOTH Episode # AND First Aired to be present (more strict)
+                if (hasFirstAired && hasEpisodeNum) {
                     // Only add if we haven't seen this row element before
                     if (!seenRows.has(p)) {
                         rows.push(p);
                         seenRows.add(p);
-                        log(`gatherRows: Added row ${rows.length} (found via textarea)`);
+                        log(`gatherRows: Added row ${rows.length} (found via textarea with Episode # and First Aired)`);
                     } else {
                         log(`gatherRows: Skipped duplicate row (already seen)`);
                     }
