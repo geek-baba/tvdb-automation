@@ -5113,42 +5113,61 @@ Or simple text format:
         const seasonAvg = rtList.length ? Math.round(rtList.reduce((a, b) => a + b, 0) / rtList.length) : 0;
 
         await ensureRows(eps.length);
-        const rows = gatherRows();
-        log(`📊 fillBulkTMDB: Found ${rows.length} form rows, ${eps.length} episodes to fill`);
-        
-        // Log row order for debugging
-        for (let r = 0; r < Math.min(rows.length, 5); r++) {
-            const row = rows[r];
-            const numEl = inputByLabelWithin(row, 'Episode #');
-            const currentNum = numEl ? numEl.value : 'empty';
-            log(`📊 Row ${r} current episode #: ${currentNum}`);
-        }
-        
-        const count = Math.min(25, Math.min(rows.length, eps.length));
+        const count = Math.min(25, Math.min(eps.length, 25));
 
-        // Simple strategy: Fill episodes sequentially into rows in order
-        // Row 0 -> Episode 1, Row 1 -> Episode 2, etc.
-        // Don't try to match by episode number - just fill in order
-        log(`📊 Filling ${count} episodes sequentially into ${rows.length} rows...`);
+        log(`📊 fillBulkTMDB: Filling ${count} episodes...`);
         log(`📊 Episode order:`, eps.map(e => `Ep ${e.episode_number}: "${e.name}"`).join(', '));
-        
+
+        // Fill episodes one at a time, re-gathering rows each time to handle DOM changes
         for (let i = 0; i < count; i++) {
             const ep = eps[i];
-            const row = rows[i];
-            
             if (!ep) {
                 log(`⚠️ No episode at index ${i}`);
                 continue;
             }
             
+            // Re-gather rows each time to get fresh references (DOM might have changed)
+            const rows = gatherRows();
+            log(`📊 [${i+1}/${count}] Re-gathered ${rows.length} rows`);
+            
+            if (i >= rows.length) {
+                log(`⚠️ Not enough rows (need ${i+1}, have ${rows.length})`);
+                break;
+            }
+            
+            const row = rows[i];
             if (!row) {
                 log(`⚠️ No row at index ${i}`);
                 continue;
             }
             
-            log(`📊 [${i+1}/${count}] Filling row ${i} with Episode ${ep.episode_number}: "${ep.name}"`);
+            // Verify we're filling into the right row by checking if it's empty or has the expected episode number
+            const numEl = inputByLabelWithin(row, 'Episode #');
+            const currentNum = numEl ? (numEl.value ? parseInt(numEl.value) : null) : null;
             
-            // Fill the entire row at once
+            if (currentNum && currentNum !== ep.episode_number && currentNum !== (i + 1)) {
+                log(`⚠️ Row ${i} already has episode # ${currentNum}, but we want ${ep.episode_number}. Skipping to avoid overwrite.`);
+                // Try to find an empty row instead
+                let foundEmptyRow = false;
+                for (let r = 0; r < rows.length; r++) {
+                    const checkRow = rows[r];
+                    const checkNumEl = inputByLabelWithin(checkRow, 'Episode #');
+                    const checkNum = checkNumEl ? (checkNumEl.value ? parseInt(checkNumEl.value) : null) : null;
+                    if (!checkNum || checkNum === 0 || checkNum === '') {
+                        log(`📊 Found empty row at index ${r}, using it for Episode ${ep.episode_number}`);
+                        fillRow(checkRow, {
+                            num: ep.episode_number,
+                            name: ep.name,
+                            overview: ep.overview,
+                            date: ep.air_date,
+                            runtime: ep.runtime || seasonAvg
+                        });
+                        foundEmptyRow = true;
+                        break;
+                    }
+                }
+                if (!foundEmptyRow) {
+                    log(`⚠️ No empty row found, filling into row ${i} anyway`);
             fillRow(row, {
                 num: ep.episode_number,
                 name: ep.name,
@@ -5156,9 +5175,20 @@ Or simple text format:
                 date: ep.air_date,
                 runtime: ep.runtime || seasonAvg
             });
+        }
+            } else {
+                log(`📊 [${i+1}/${count}] Filling row ${i} (current: ${currentNum || 'empty'}) with Episode ${ep.episode_number}: "${ep.name}"`);
+                fillRow(row, {
+                    num: ep.episode_number,
+                    name: ep.name,
+                    overview: ep.overview,
+                    date: ep.air_date,
+                    runtime: ep.runtime || seasonAvg
+                });
+            }
             
-            // Wait between fills to ensure form updates properly and prevent race conditions
-            await sleep(150);
+            // Wait between fills to ensure form updates properly
+            await sleep(200);
         }
         
         log(`✅ Completed filling ${count} episodes`);
