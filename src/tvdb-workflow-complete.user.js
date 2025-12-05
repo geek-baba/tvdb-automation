@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TVDB Workflow Helper - Complete
 // @namespace    tvdb.workflow
-// @version      1.8.5
+// @version      1.8.6
 // @description  Complete TVDB 5-step workflow helper with TMDB/OMDb/Hoichoi integration and flexible data source modes
 // @author       you
 // @match        https://thetvdb.com/series/create*
@@ -5184,7 +5184,7 @@ Or simple text format:
         log(`✅ Successfully filled ${filledCount} of ${count} episodes. Review, tweak, submit.`);
     }
 
-    // Fixed: Create exactly 'need' rows total (not need - have)
+    // Fixed: Keep clicking until we have exactly 'need' rows
     // Uses gatherRows() for consistent counting (matches what fillBulkTMDB uses)
     async function ensureRows(n) {
         const addBtn = Array.from(document.querySelectorAll('button')).find(b => 
@@ -5203,49 +5203,40 @@ Or simple text format:
         
         log(`📊 ensureRows: Starting with ${have} rows, need ${need} total`);
         
-        // Calculate how many rows we need to ADD
-        const toAdd = need - have;
-        
-        if (toAdd <= 0) {
+        if (have >= need) {
             log(`✓ Already have ${have} rows, need ${need}. No rows to add.`);
             return;
         }
         
-        log(`📊 Need to create ${toAdd} additional rows...`);
+        // Keep clicking until we have enough rows
+        let maxAttempts = need * 2; // Safety limit
+        let attempts = 0;
         
-        // Click the button exactly 'toAdd' times
-        for (let i = 0; i < toAdd; i++) {
+        while (have < need && attempts < maxAttempts) {
             addBtn.click();
-            await sleep(60); // Delay for DOM to update
+            await sleep(100); // Wait for DOM to update
             
-            // Verify after each click
-            const currentCount = gatherRows().length;
-            log(`📊 Click ${i + 1}/${toAdd}: Now have ${currentCount} rows`);
+            // Re-count after each click
+            const newCount = gatherRows().length;
+            attempts++;
+            
+            if (newCount > have) {
+                log(`✓ Click ${attempts}: Row created (${have} → ${newCount})`);
+                have = newCount;
+            } else {
+                log(`⚠️ Click ${attempts}: No new row detected (still ${have})`);
+                // Wait a bit longer and try again
+                await sleep(200);
+                have = gatherRows().length;
+            }
         }
         
-        // Wait for all rows to be fully created
-        await sleep(300);
-        
-        // Final verification using gatherRows() (same method as fillBulkTMDB)
+        // Final verification
         const finalCount = gatherRows().length;
-        log(`📊 ensureRows: Final count ${finalCount} rows (needed: ${need})`);
+        log(`📊 ensureRows: Final count ${finalCount} rows (needed: ${need}, attempts: ${attempts})`);
         
-        // Safety check: if we're still short, keep creating until we have enough
-        let currentCount = finalCount;
-        let safetyAttempts = 0;
-        while (currentCount < need && addBtn && safetyAttempts < 3) {
-            log(`⚠️ Safety check ${safetyAttempts + 1}: Creating 1 additional row (have ${currentCount}, need ${need})`);
-            addBtn.click();
-            await sleep(300);
-            const newCount = gatherRows().length;
-            log(`📊 Safety check: New count ${newCount} rows`);
-            if (newCount === currentCount) {
-                // Row count didn't increase, break to avoid infinite loop
-                log(`⚠️ Row count didn't increase, stopping safety check`);
-                break;
-            }
-            currentCount = newCount;
-            safetyAttempts++;
+        if (finalCount < need) {
+            log(`⚠️ Warning: Only ${finalCount} rows available, but need ${need}`);
         }
     }
 
