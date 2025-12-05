@@ -2285,10 +2285,25 @@ Or simple text format:
                 );
                 
                 if (isCSV && lines.length > 1) {
-                    log(`Detected CSV format, parsing...`);
-                    // Skip header row
-                    for (let i = 1; i < lines.length; i++) {
+                    log(`✅ Detected CSV format, parsing ${lines.length - 1} data rows (skipping header)`);
+                    // Skip header row - find it first
+                    let headerIndex = 0;
+                    for (let idx = 0; idx < lines.length; idx++) {
+                        if (lines[idx].includes('Episode Number') || lines[idx].includes('Title') || lines[idx].includes('Runtime')) {
+                            headerIndex = idx;
+                            log(`📊 Found CSV header at line ${idx}: "${lines[idx]}"`);
+                            break;
+                        }
+                    }
+                    
+                    // Parse data rows starting after header
+                    for (let i = headerIndex + 1; i < lines.length; i++) {
                         const line = lines[i];
+                        if (!line || line.trim().length === 0) {
+                            log(`⚠️ Skipping empty line ${i}`);
+                            continue;
+                        }
+                        log(`📊 Parsing CSV line ${i}: "${line.substring(0, 50)}..."`);
                         // Parse CSV line: "S1 E1,Title - Hindi,9m,Description"
                         // Handle quoted fields that may contain commas
                         const csvFields = [];
