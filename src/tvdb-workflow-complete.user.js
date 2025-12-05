@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TVDB Workflow Helper - Complete
 // @namespace    tvdb.workflow
-// @version      1.7.8
+// @version      1.7.9
 // @description  Complete TVDB 5-step workflow helper with TMDB/OMDb/Hoichoi integration and flexible data source modes
 // @author       you
 // @match        https://thetvdb.com/series/create*
@@ -35,7 +35,7 @@
     'use strict';
 
     // Immediate console logs to verify script is running
-    console.log('🎬 TVDB Workflow Helper v1.7.8 - Script file loaded');
+    console.log('🎬 TVDB Workflow Helper v1.7.9 - Script file loaded');
     console.log('📍 Current URL:', window.location.href);
     console.log('📍 Current pathname:', window.location.pathname);
     console.log('📋 Complete 5-step TVDB submission automation');
@@ -374,10 +374,10 @@
             if (document.readyState === 'complete' && document.body) {
                 // Small delay to ensure DOM is fully ready
                 setTimeout(() => {
-                    init();
+            init();
                 }, 100);
-            } else {
-                setTimeout(waitForPage, 100);
+        } else {
+            setTimeout(waitForPage, 100);
             }
         } catch (error) {
             console.error('❌ Error in waitForPage:', error);
@@ -389,13 +389,13 @@
     // Initialize the script
     function init() {
         try {
-            log('Initializing TVDB Workflow Helper - Complete');
+        log('Initializing TVDB Workflow Helper - Complete');
             log('Current URL:', window.location.href);
             log('Current path:', window.location.pathname);
             log('Document ready state:', document.readyState);
             
-            loadConfig();
-            
+        loadConfig();
+        
             // Setup keyboard shortcut first
             setupKeyboardShortcut();
             
@@ -403,8 +403,8 @@
             createFloatingToggle();
             
             // Create main UI
-            createUI();
-            
+        createUI();
+        
             log('✅ Initialization complete');
         } catch (error) {
             console.error('❌ Error initializing TVDB Workflow Helper:', error);
@@ -562,9 +562,9 @@
             }, 200);
         } else {
             try {
-                document.body.appendChild(container);
-                setupEventListeners();
-                log('UI created successfully for step:', currentStep);
+        document.body.appendChild(container);
+        setupEventListeners();
+        log('UI created successfully for step:', currentStep);
             } catch (error) {
                 console.error('Error appending UI to body:', error);
                 log('❌ Failed to append UI to body: ' + error.message);
@@ -813,11 +813,11 @@
                     </div>
 
                     <div id="tvdb-tmdb-episode-fields">
-                        <div style="margin-bottom: 15px;">
-                            <label style="display: block; margin-bottom: 5px; color: #ccc;">TMDB TV ID:</label>
-                            <input type="text" id="tvdb-tmdb-id-step3" placeholder="e.g., 277489"
-                                   style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: #333; color: white; margin-bottom: 10px;"
-                                   value="${context.tmdbId}">
+                    <div style="margin-bottom: 15px;">
+                        <label style="display: block; margin-bottom: 5px; color: #ccc;">TMDB TV ID:</label>
+                        <input type="text" id="tvdb-tmdb-id-step3" placeholder="e.g., 277489"
+                               style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: #333; color: white; margin-bottom: 10px;"
+                               value="${context.tmdbId}">
                         </div>
 
                         <div style="margin-bottom: 15px;">
@@ -1739,7 +1739,7 @@ Or simple text format:
             // Sort episodes by episode number to ensure correct order
             episodes.sort((a, b) => (a.episodeNumber || 0) - (b.episodeNumber || 0));
             log(`✅ Sorted ${episodes.length} episodes by episode number`);
-            
+
             // Store episode data globally
             window.tvdbEpisodeData = {
                 season: parseInt(seasonNum),
@@ -2314,6 +2314,9 @@ Or simple text format:
                             const epNumMatch = csvFields[0].match(/S\d+\s*E(\d+)|S\d+E(\d+)|[Ee]pisode\s*(\d+)|Ep\s*(\d+)|(\d+)/i);
                             if (epNumMatch) {
                                 episodeNumber = parseInt(epNumMatch[1] || epNumMatch[2] || epNumMatch[3] || epNumMatch[4] || epNumMatch[5]);
+                                log(`📊 CSV Line ${i}: Extracted episode number ${episodeNumber} from "${csvFields[0]}"`);
+                            } else {
+                                log(`⚠️ CSV Line ${i}: Could not extract episode number from "${csvFields[0]}"`);
                             }
                             
                             // Extract title (remove language suffix)
@@ -2987,11 +2990,11 @@ Or simple text format:
             
             html += `<div><strong>${dataSource} Title:</strong> ${tmdbData.name} (${tmdbData.year})</div>`;
             if (!tmdbData.isOmdbOnly && !tmdbData.isHoichoiOnly) {
-                html += `<div><strong>TMDB Original:</strong> ${tmdbData.originalName} (${tmdbData.year})</div>`;
+            html += `<div><strong>TMDB Original:</strong> ${tmdbData.originalName} (${tmdbData.year})</div>`;
             }
             html += `<div><strong>Original Language:</strong> ${originalLangName} (${tmdbData.originalLanguage})</div>`;
             if (!tmdbData.isHoichoiOnly) {
-                html += `<div><strong>IMDb ID:</strong> ${imdbId || 'Not found'}</div>`;
+            html += `<div><strong>IMDb ID:</strong> ${imdbId || 'Not found'}</div>`;
             }
             if (tmdbData.homepage) {
                 html += `<div><strong>Official Site:</strong> <a href="${tmdbData.homepage}" target="_blank" style="color: #4CAF50;">${tmdbData.homepage}</a></div>`;
@@ -5089,17 +5092,25 @@ Or simple text format:
         }
 
         const eps = episodes.slice().sort((a, b) => (a.episode_number || 0) - (b.episode_number || 0));
+        log(`📊 fillBulkTMDB: Sorted ${eps.length} episodes. Order:`, eps.map(e => `Ep ${e.episode_number}: "${e.name}"`).join(', '));
+        
         const rtList = eps.map(e => e.runtime).filter(n => typeof n === 'number' && n > 0);
         const seasonAvg = rtList.length ? Math.round(rtList.reduce((a, b) => a + b, 0) / rtList.length) : 0;
 
         await ensureRows(eps.length);
         const rows = gatherRows();
+        log(`📊 fillBulkTMDB: Found ${rows.length} form rows, ${eps.length} episodes to fill`);
+        
         const count = Math.min(25, Math.min(rows.length, eps.length));
 
         for (let i = 0; i < count; i++) {
             const row = rows[i];
             const ep = eps[i];
-            if (!row || !ep) continue;
+            if (!row || !ep) {
+                log(`⚠️ fillBulkTMDB: Skipping row ${i} - row: ${!!row}, ep: ${!!ep}`);
+                continue;
+            }
+            log(`📊 fillBulkTMDB: Filling row ${i} with Episode ${ep.episode_number}: "${ep.name}"`);
             fillRow(row, {
                 num: ep.episode_number,
                 name: ep.name,
@@ -6332,7 +6343,7 @@ Or simple text format:
     
     window.tvdbHelperTest = function() {
         console.log('🧪 TVDB Helper Test Function');
-        console.log('Script version: 1.7.8');
+        console.log('Script version: 1.7.9');
         console.log('Current step:', getCurrentStep());
         console.log('Document ready:', document.readyState);
         console.log('Body exists:', !!document.body);
