@@ -339,20 +339,37 @@
 
     // Wait for page to load
     function waitForPage() {
-        if (document.readyState === 'complete') {
-            init();
-        } else {
-            setTimeout(waitForPage, 100);
+        try {
+            if (document.readyState === 'complete') {
+                init();
+            } else {
+                setTimeout(waitForPage, 100);
+            }
+        } catch (error) {
+            console.error('❌ Error in waitForPage:', error);
         }
     }
 
     // Initialize the script
     function init() {
-        log('Initializing TVDB Workflow Helper - Complete');
-        loadConfig();
-        
-        createUI();
-        
+        try {
+            log('Initializing TVDB Workflow Helper - Complete');
+            loadConfig();
+            
+            createUI();
+        } catch (error) {
+            console.error('❌ Error initializing TVDB Workflow Helper:', error);
+            // Try to show a basic error message
+            try {
+                const errorDiv = document.createElement('div');
+                errorDiv.style.cssText = 'position:fixed;top:20px;right:20px;background:red;color:white;padding:10px;z-index:99999;';
+                errorDiv.textContent = 'TVDB Helper Error: ' + error.message;
+                document.body.appendChild(errorDiv);
+            } catch (e) {
+                // If we can't even show an error, just log it
+                console.error('Failed to show error UI:', e);
+            }
+        }
     }
 
 
@@ -2538,10 +2555,17 @@
             let html;
             
             // Check for GM_xmlhttpRequest in multiple ways (Tampermonkey exposes it differently)
-            const gmRequest = typeof GM_xmlhttpRequest !== 'undefined' ? GM_xmlhttpRequest :
-                             typeof unsafeWindow !== 'undefined' && unsafeWindow.GM_xmlhttpRequest ? unsafeWindow.GM_xmlhttpRequest :
-                             typeof window !== 'undefined' && window.GM_xmlhttpRequest ? window.GM_xmlhttpRequest :
-                             null;
+            let gmRequest = null;
+            try {
+                if (typeof GM_xmlhttpRequest !== 'undefined' && GM_xmlhttpRequest) {
+                    gmRequest = GM_xmlhttpRequest;
+                } else if (typeof window !== 'undefined' && window.GM_xmlhttpRequest) {
+                    gmRequest = window.GM_xmlhttpRequest;
+                }
+            } catch (e) {
+                // unsafeWindow or other access might fail, ignore
+                log('Could not access GM_xmlhttpRequest:', e);
+            }
             
             log(`GM_xmlhttpRequest available: ${!!gmRequest}`);
             
