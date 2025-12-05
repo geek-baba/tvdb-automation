@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TVDB Workflow Helper - Complete
 // @namespace    tvdb.workflow
-// @version      1.7.5
+// @version      1.7.6
 // @description  Complete TVDB 5-step workflow helper with TMDB/OMDb/Hoichoi integration and flexible data source modes
 // @author       you
 // @match        https://thetvdb.com/series/create*
@@ -35,7 +35,7 @@
     'use strict';
 
     // Immediate console logs to verify script is running
-    console.log('🎬 TVDB Workflow Helper v1.7.5 - Script file loaded');
+    console.log('🎬 TVDB Workflow Helper v1.7.6 - Script file loaded');
     console.log('📍 Current URL:', window.location.href);
     console.log('📍 Current pathname:', window.location.pathname);
     console.log('📋 Complete 5-step TVDB submission automation');
@@ -808,6 +808,7 @@
                             <option value="tmdb">TMDB (Recommended)</option>
                             <option value="omdb">OMDb Only (IMDb ID)</option>
                             <option value="hoichoi">Hoichoi (URL)</option>
+                            <option value="manual">Manual Input (Paste Data)</option>
                         </select>
                     </div>
 
@@ -845,6 +846,26 @@
                                    value="${window.tvdbFetchedData?.officialSite || ''}">
                             <div style="font-size: 10px; color: #999; margin-bottom: 10px;">
                                 ⚠️ Hoichoi episode data: scraped from show page, may have limited descriptions
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="tvdb-manual-episode-fields" style="display: none;">
+                        <div style="margin-bottom: 15px;">
+                            <label style="display: block; margin-bottom: 5px; color: #ccc;">Paste Episode Data (JSON or Text):</label>
+                            <textarea id="tvdb-manual-episode-data" placeholder='Paste episode data here. Examples:
+JSON format:
+[
+  {"episodeNumber": 1, "name": "Kiraaye Ka Kissa - Hindi", "overview": "Shreya is muddled...", "runtime": 9},
+  {"episodeNumber": 2, "name": "Online Shaadi - Hindi", "overview": "When her parents...", "runtime": 9}
+]
+
+Or simple text format (one per line):
+1. Kiraaye Ka Kissa - Hindi | 9m | Shreya is muddled about the countless rules...
+2. Online Shaadi - Hindi | 9m | When her parents are going crazy...'
+                                   style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: #333; color: white; min-height: 150px; font-family: monospace; font-size: 11px; margin-bottom: 5px;"></textarea>
+                            <div style="font-size: 10px; color: #999; margin-bottom: 10px;">
+                                💡 Tip: Take a screenshot of Hoichoi episodes, extract data with Gemini/AI, and paste here
                             </div>
                         </div>
                     </div>
@@ -1176,18 +1197,27 @@
                         const tmdbEpisodeFields = document.getElementById('tvdb-tmdb-episode-fields');
                         const omdbEpisodeFields = document.getElementById('tvdb-omdb-episode-fields');
                         const hoichoiEpisodeFields = document.getElementById('tvdb-hoichoi-episode-fields');
+                        const manualEpisodeFields = document.getElementById('tvdb-manual-episode-fields');
                         if (this.value === 'omdb') {
                             if (tmdbEpisodeFields) tmdbEpisodeFields.style.display = 'none';
                             if (omdbEpisodeFields) omdbEpisodeFields.style.display = 'block';
                             if (hoichoiEpisodeFields) hoichoiEpisodeFields.style.display = 'none';
+                            if (manualEpisodeFields) manualEpisodeFields.style.display = 'none';
                         } else if (this.value === 'hoichoi') {
                             if (tmdbEpisodeFields) tmdbEpisodeFields.style.display = 'none';
                             if (omdbEpisodeFields) omdbEpisodeFields.style.display = 'none';
                             if (hoichoiEpisodeFields) hoichoiEpisodeFields.style.display = 'block';
+                            if (manualEpisodeFields) manualEpisodeFields.style.display = 'none';
+                        } else if (this.value === 'manual') {
+                            if (tmdbEpisodeFields) tmdbEpisodeFields.style.display = 'none';
+                            if (omdbEpisodeFields) omdbEpisodeFields.style.display = 'none';
+                            if (hoichoiEpisodeFields) hoichoiEpisodeFields.style.display = 'none';
+                            if (manualEpisodeFields) manualEpisodeFields.style.display = 'block';
                         } else {
                             if (tmdbEpisodeFields) tmdbEpisodeFields.style.display = 'block';
                             if (omdbEpisodeFields) omdbEpisodeFields.style.display = 'none';
                             if (hoichoiEpisodeFields) hoichoiEpisodeFields.style.display = 'none';
+                            if (manualEpisodeFields) manualEpisodeFields.style.display = 'none';
                         }
                     };
                 }
@@ -1662,6 +1692,9 @@
         } else if (episodeSource === 'hoichoi') {
             // Hoichoi mode
             await fetchEpisodesHoichoi();
+        } else if (episodeSource === 'manual') {
+            // Manual input mode
+            await fetchEpisodesManual();
         } else {
             // TMDB mode (original behavior)
             await fetchEpisodesTmdb();
@@ -6042,7 +6075,7 @@
     
     window.tvdbHelperTest = function() {
         console.log('🧪 TVDB Helper Test Function');
-        console.log('Script version: 1.7.5');
+        console.log('Script version: 1.7.6');
         console.log('Current step:', getCurrentStep());
         console.log('Document ready:', document.readyState);
         console.log('Body exists:', !!document.body);
