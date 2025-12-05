@@ -5,6 +5,7 @@
 // @description  Complete TVDB 5-step workflow helper with TMDB/OMDb/Hoichoi integration and flexible data source modes
 // @author       you
 // @match        https://thetvdb.com/series/create*
+// @match        https://thetvdb.com/series/create/*
 // @match        https://thetvdb.com/series/create-step2*
 // @match        https://thetvdb.com/series/*/seasons/official/*/bulkadd*
 // @match        https://thetvdb.com/artwork/upload*
@@ -27,11 +28,14 @@
 (function() {
     'use strict';
 
-    console.log('🎬 TVDB Workflow Helper v1.6.0 - Production Ready');
+    // Immediate console logs to verify script is running
+    console.log('🎬 TVDB Workflow Helper v1.6.0 - Script file loaded');
+    console.log('📍 Current URL:', window.location.href);
+    console.log('📍 Current pathname:', window.location.pathname);
     console.log('📋 Complete 5-step TVDB submission automation');
-    console.log('📍 Script loaded on:', window.location.href);
     console.log('⌨️  Keyboard shortcut: Ctrl+Shift+T (or Cmd+Shift+T on Mac) to show/hide');
     console.log('🔧 TMDB + OMDb + Hoichoi integration with flexible data source modes');
+    console.log('🧪 Test function available: tvdbHelperTest() or tvdbHelperForceShow()');
 
     // Configuration and state
     const CONFIG = {
@@ -4540,6 +4544,64 @@
             log('🔄 TVDB processing flag reset');
         };
 
+
+    // Expose global function for manual testing
+    window.tvdbHelperForceShow = function() {
+        console.log('🔧 Manual force show called');
+        forceShowPanel();
+    };
+    
+    window.tvdbHelperTest = function() {
+        console.log('🧪 TVDB Helper Test Function');
+        console.log('Script version: 1.6.0');
+        console.log('Current step:', getCurrentStep());
+        console.log('Document ready:', document.readyState);
+        console.log('Body exists:', !!document.body);
+        console.log('UI exists:', !!document.getElementById('tvdb-helper-ui'));
+        console.log('Toggle exists:', !!document.getElementById('tvdb-helper-toggle'));
+        forceShowPanel();
+    };
+    
+    // Create immediate test indicator
+    function createTestIndicator() {
+        const testDiv = document.createElement('div');
+        testDiv.id = 'tvdb-helper-test-indicator';
+        testDiv.style.cssText = `
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            background: #ff6b6b;
+            color: white;
+            padding: 10px;
+            border-radius: 4px;
+            z-index: 999999;
+            font-size: 12px;
+            font-weight: bold;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        `;
+        testDiv.textContent = '🎬 TVDB Helper Loaded - Press Ctrl+Shift+T';
+        testDiv.onclick = function() {
+            forceShowPanel();
+        };
+        
+        // Remove after 5 seconds
+        setTimeout(() => {
+            if (testDiv.parentNode) {
+                testDiv.style.opacity = '0.5';
+                testDiv.style.cursor = 'pointer';
+                testDiv.title = 'Click to show UI';
+            }
+        }, 5000);
+        
+        if (document.body) {
+            document.body.appendChild(testDiv);
+        } else {
+            setTimeout(createTestIndicator, 100);
+        }
+    }
+    
+    // Create test indicator immediately
+    createTestIndicator();
 
     // Start the script
     waitForPage();
