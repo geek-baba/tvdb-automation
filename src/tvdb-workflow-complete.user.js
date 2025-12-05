@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TVDB Workflow Helper - Complete
 // @namespace    tvdb.workflow
-// @version      1.7.9
+// @version      1.8.0
 // @description  Complete TVDB 5-step workflow helper with TMDB/OMDb/Hoichoi integration and flexible data source modes
 // @author       you
 // @match        https://thetvdb.com/series/create*
@@ -35,7 +35,7 @@
     'use strict';
 
     // Immediate console logs to verify script is running
-    console.log('🎬 TVDB Workflow Helper v1.7.9 - Script file loaded');
+    console.log('🎬 TVDB Workflow Helper v1.8.0 - Script file loaded');
     console.log('📍 Current URL:', window.location.href);
     console.log('📍 Current pathname:', window.location.pathname);
     console.log('📋 Complete 5-step TVDB submission automation');
@@ -5116,23 +5116,59 @@ Or simple text format:
         const rows = gatherRows();
         log(`📊 fillBulkTMDB: Found ${rows.length} form rows, ${eps.length} episodes to fill`);
         
+        // Log row order for debugging
+        for (let r = 0; r < Math.min(rows.length, 5); r++) {
+            const row = rows[r];
+            const numEl = inputByLabelWithin(row, 'Episode #');
+            const currentNum = numEl ? numEl.value : 'empty';
+            log(`📊 Row ${r} current episode #: ${currentNum}`);
+        }
+        
         const count = Math.min(25, Math.min(rows.length, eps.length));
 
+        // Match episodes to rows by episode number, not by array index
+        // This ensures Episode 1 goes to the row that should have episode 1, etc.
         for (let i = 0; i < count; i++) {
-            const row = rows[i];
             const ep = eps[i];
-            if (!row || !ep) {
-                log(`⚠️ fillBulkTMDB: Skipping row ${i} - row: ${!!row}, ep: ${!!ep}`);
+            if (!ep) {
+                log(`⚠️ fillBulkTMDB: No episode at index ${i}`);
                 continue;
             }
-            log(`📊 fillBulkTMDB: Filling row ${i} with Episode ${ep.episode_number}: "${ep.name}"`);
-            fillRow(row, {
+            
+            // Try to find the row that should have this episode number
+            // First, try to find a row that already has this episode number
+            let targetRow = null;
+            for (const row of rows) {
+                const numEl = inputByLabelWithin(row, 'Episode #');
+                if (numEl && numEl.value && parseInt(numEl.value) === ep.episode_number) {
+                    targetRow = row;
+                    log(`📊 Found row with matching episode # ${ep.episode_number}`);
+                    break;
+                }
+            }
+            
+            // If no matching row found, use row at index i (assuming rows are in order)
+            if (!targetRow && i < rows.length) {
+                targetRow = rows[i];
+                log(`📊 Using row at index ${i} for Episode ${ep.episode_number}`);
+            }
+            
+            if (!targetRow) {
+                log(`⚠️ fillBulkTMDB: No row found for Episode ${ep.episode_number}`);
+                continue;
+            }
+            
+            log(`📊 fillBulkTMDB: Filling Episode ${ep.episode_number} "${ep.name}" into row`);
+            fillRow(targetRow, {
                 num: ep.episode_number,
                 name: ep.name,
                 overview: ep.overview,
                 date: ep.air_date,
                 runtime: ep.runtime || seasonAvg
             });
+            
+            // Small delay to ensure form updates properly
+            await sleep(50);
         }
         log(`Episodes filled (TMDB). Review, tweak, submit.`);
     }
@@ -6358,7 +6394,7 @@ Or simple text format:
     
     window.tvdbHelperTest = function() {
         console.log('🧪 TVDB Helper Test Function');
-        console.log('Script version: 1.7.9');
+        console.log('Script version: 1.8.0');
         console.log('Current step:', getCurrentStep());
         console.log('Document ready:', document.readyState);
         console.log('Body exists:', !!document.body);
