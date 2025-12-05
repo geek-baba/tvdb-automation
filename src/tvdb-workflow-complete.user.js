@@ -2207,6 +2207,153 @@ Or simple text format (one per line):
         }
     }
 
+    // Fetch episodes from manual input (paste data)
+    async function fetchEpisodesManual() {
+        const manualData = document.getElementById('tvdb-manual-episode-data')?.value.trim();
+        
+        if (!manualData) {
+            updateStatus('Please paste episode data in the text area');
+            return;
+        }
+
+        updateStatus('Parsing manual episode data...');
+        log(`Parsing manual episode data (${manualData.length} characters)`);
+
+        try {
+            let episodes = [];
+            
+            // Try parsing as JSON first
+            try {
+                const jsonData = JSON.parse(manualData);
+                if (Array.isArray(jsonData)) {
+                    episodes = jsonData.map((ep, idx) => ({
+                        episodeNumber: ep.episodeNumber || ep.episode_number || ep.number || ep.index || (idx + 1),
+                        name: ep.name || ep.title || ep.Title || ep.episodeName || `Episode ${ep.episodeNumber || ep.episode_number || ep.number || (idx + 1)}`,
+                        overview: ep.overview || ep.description || ep.plot || ep.synopsis || ep.summary || '',
+                        airDate: ep.airDate || ep.air_date || ep.released || ep.publishedAt || '',
+                        runtime: ep.runtime || ep.duration || (ep.runtimeMinutes ? parseInt(ep.runtimeMinutes) : 0) || 0,
+                        isHoichoiOnly: true,
+                        descriptionSource: 'Manual'
+                    }));
+                    log(`✅ Parsed ${episodes.length} episodes from JSON`);
+                } else if (jsonData.episodes || jsonData.data) {
+                    const episodeArray = jsonData.episodes || jsonData.data;
+                    episodes = episodeArray.map((ep, idx) => ({
+                        episodeNumber: ep.episodeNumber || ep.episode_number || ep.number || ep.index || (idx + 1),
+                        name: ep.name || ep.title || ep.Title || ep.episodeName || `Episode ${ep.episodeNumber || ep.episode_number || ep.number || (idx + 1)}`,
+                        overview: ep.overview || ep.description || ep.plot || ep.synopsis || ep.summary || '',
+                        airDate: ep.airDate || ep.air_date || ep.released || ep.publishedAt || '',
+                        runtime: ep.runtime || ep.duration || (ep.runtimeMinutes ? parseInt(ep.runtimeMinutes) : 0) || 0,
+                        isHoichoiOnly: true,
+                        descriptionSource: 'Manual'
+                    }));
+                    log(`✅ Parsed ${episodes.length} episodes from JSON object`);
+                }
+            } catch (e) {
+                // Not JSON, try text parsing
+                log(`Not JSON format, trying text parsing...`);
+                
+                // Try parsing text format like:
+                // 1. Title | 9m | Description
+                // 2. Title | 9m | Description
+                const lines = manualData.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+                
+                for (const line of lines) {
+                    // Try pattern: "1. Title - Hindi | 9m | Description"
+                    // Or: "S1 E1: Title - Hindi | 9m | Description"
+                    // Or: "Episode 1: Title - Hindi | 9m | Description"
+                    const patterns = [
+                        /^(?:S\d+\s*E|Episode\s*|Ep\s*)?(\d+)[:.\s-]+\s*(.+?)\s*\|\s*(\d+)m?\s*\|\s*(.+)$/i,
+                        /^(\d+)[:.\s-]+\s*(.+?)\s*\|\s*(\d+)m?\s*\|\s*(.+)$/i,
+                        /^(\d+)[:.\s-]+\s*(.+?)\s*\|\s*(.+)$/i,
+                        /^(\d+)[:.\s-]+\s*(.+)$/i
+                    ];
+                    
+                    for (const pattern of patterns) {
+                        const match = line.match(pattern);
+                        if (match) {
+                            const epNum = parseInt(match[1]);
+                            let title = match[2]?.trim() || '';
+                            let runtime = 0;
+                            let overview = '';
+                            
+                            if (match[3]) {
+                                // Check if match[3] is runtime or part of title
+                                if (match[3].match(/^\d+$/)) {
+                                    runtime = parseInt(match[3]);
+                                    overview = match[4]?.trim() || '';
+                                } else {
+                                    overview = match[3]?.trim() || '';
+                                }
+                            }
+                            
+                            // Remove language suffix from title
+                            title = title.replace(/\s*-\s*(Hindi|Bengali|English|Tamil|Telugu|Marathi|Gujarati|Punjabi|Kannada|Malayalam)$/i, '').trim();
+                            
+                            episodes.push({
+                                episodeNumber: epNum,
+                                name: title || `Episode ${epNum}`,
+                                overview: overview,
+                                airDate: '',
+                                runtime: runtime,
+                                isHoichoiOnly: true,
+                                descriptionSource: 'Manual'
+                            });
+                            break;
+                        }
+                    }
+                }
+                
+                if (episodes.length === 0) {
+                    // Try simple numbered list
+                    lines.forEach((line, idx) => {
+                        const epMatch = line.match(/^(\d+)[:.\s-]+\s*(.+)$/);
+                        if (epMatch) {
+                            const epNum = parseInt(epMatch[1]);
+                            let title = epMatch[2].trim();
+                            title = title.replace(/\s*-\s*(Hindi|Bengali|English|Tamil|Telugu)$/i, '').trim();
+                            episodes.push({
+                                episodeNumber: epNum,
+                                name: title || `Episode ${epNum}`,
+                                overview: '',
+                                airDate: '',
+                                runtime: 0,
+                                isHoichoiOnly: true,
+                                descriptionSource: 'Manual'
+                            });
+                        }
+                    });
+                }
+                
+                log(`✅ Parsed ${episodes.length} episodes from text format`);
+            }
+            
+            if (episodes.length === 0) {
+                throw new Error('Could not parse episode data. Please use JSON format or text format like: "1. Title | 9m | Description"');
+            }
+            
+            // Store episode data globally
+            window.tvdbEpisodeData = {
+                season: parseInt(document.getElementById('tvdb-season-num')?.value || '1'),
+                episodes: episodes,
+                tmdbId: '',
+                imdbId: null,
+                isHoichoiOnly: true
+            };
+
+            // Generate preview
+            const preview = generateStep3Preview(episodes);
+            updatePreview(preview);
+
+            updateStatus(`Parsed ${episodes.length} episodes from manual input! Click Fill to populate the form.`);
+            log(`Manual episode parsing completed successfully. Found ${episodes.length} episodes`);
+
+        } catch (error) {
+            updateStatus(`Error parsing manual episode data: ${error.message}`);
+            log('Error parsing manual episode data:', error);
+        }
+    }
+
     // Fetch episodes from TMDB
     async function fetchTmdbEpisodes(tmdbId, seasonNum, providedImdbId = null) {
         // Try multiple languages to get descriptions
