@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TVDB Workflow Helper - Complete
 // @namespace    tvdb.workflow
-// @version      1.7.7
+// @version      1.7.8
 // @description  Complete TVDB 5-step workflow helper with TMDB/OMDb/Hoichoi integration and flexible data source modes
 // @author       you
 // @match        https://thetvdb.com/series/create*
@@ -35,7 +35,7 @@
     'use strict';
 
     // Immediate console logs to verify script is running
-    console.log('🎬 TVDB Workflow Helper v1.7.7 - Script file loaded');
+    console.log('🎬 TVDB Workflow Helper v1.7.8 - Script file loaded');
     console.log('📍 Current URL:', window.location.href);
     console.log('📍 Current pathname:', window.location.pathname);
     console.log('📋 Complete 5-step TVDB submission automation');
@@ -1733,6 +1733,9 @@ Or simple text format:
             // Fetch episodes from TMDB with IMDb ID for OMDb fallback
             const episodes = await fetchTmdbEpisodes(tmdbId, seasonNum, imdbId);
 
+            // Sort episodes by episode number to ensure correct order
+            episodes.sort((a, b) => (a.episodeNumber || 0) - (b.episodeNumber || 0));
+            
             // Store episode data globally
             window.tvdbEpisodeData = {
                 season: parseInt(seasonNum),
@@ -2422,6 +2425,10 @@ Or simple text format:
             if (episodes.length === 0) {
                 throw new Error('Could not parse episode data. Please use JSON format or text format like: "1. Title | 9m | Description"');
             }
+            
+            // Sort episodes by episode number to ensure correct order
+            episodes.sort((a, b) => (a.episodeNumber || 0) - (b.episodeNumber || 0));
+            log(`✅ Sorted ${episodes.length} episodes by episode number`);
             
             // Store episode data globally
             window.tvdbEpisodeData = {
@@ -6313,7 +6320,7 @@ Or simple text format:
     
     window.tvdbHelperTest = function() {
         console.log('🧪 TVDB Helper Test Function');
-        console.log('Script version: 1.7.7');
+        console.log('Script version: 1.7.8');
         console.log('Current step:', getCurrentStep());
         console.log('Document ready:', document.readyState);
         console.log('Body exists:', !!document.body);
