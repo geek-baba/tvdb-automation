@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TVDB Workflow Helper - Complete
 // @namespace    tvdb.workflow
-// @version      1.10.0
+// @version      1.10.1
 // @description  Complete TVDB 5-step workflow helper with TMDB/OMDb/Hoichoi integration and flexible data source modes
 // @author       you
 // @updateURL    https://raw.githubusercontent.com/geek-baba/tvdb-automation/main/src/tvdb-workflow-complete.user.js
@@ -14,6 +14,7 @@
 // @run-at       document-end
 // @grant        GM_setValue
 // @grant        GM_getValue
+// @grant        GM_xmlhttpRequest
 // @connect      api.themoviedb.org
 // @connect      www.omdbapi.com
 // @connect      www.hoichoi.tv
@@ -2961,13 +2962,40 @@
                 throw new Error(getHoichoiUrlErrorMessage());
             }
 
-            // Fetch page HTML
-            const response = await fetch(url);
-            if (!response.ok) {
-                throw new Error(`Failed to fetch page: ${response.status} ${response.statusText}`);
+            // Fetch page HTML using GM_xmlhttpRequest (required for cross-origin requests)
+            let html;
+            if (typeof GM_xmlhttpRequest !== 'undefined') {
+                html = await new Promise((resolve, reject) => {
+                    GM_xmlhttpRequest({
+                        method: 'GET',
+                        url: url,
+                        headers: {
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                        },
+                        onload: function(response) {
+                            if (response.status >= 200 && response.status < 300) {
+                                resolve(response.responseText);
+                            } else {
+                                reject(new Error(`Failed to fetch page: ${response.status} ${response.statusText}`));
+                            }
+                        },
+                        onerror: function(error) {
+                            reject(new Error(`Network error: ${error.error || error.message || 'Unknown error'}`));
+                        },
+                        ontimeout: function() {
+                            reject(new Error('Request timeout'));
+                        },
+                        timeout: 30000
+                    });
+                });
+            } else {
+                // Fallback to fetch() if GM_xmlhttpRequest is not available
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch page: ${response.status} ${response.statusText}`);
+                }
+                html = await response.text();
             }
-
-            const html = await response.text();
             log('✅ Page HTML fetched');
 
             // Parse the page
