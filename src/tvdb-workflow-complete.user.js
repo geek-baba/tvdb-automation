@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TVDB Workflow Helper - Complete
 // @namespace    tvdb.workflow
-// @version      1.10.4
+// @version      1.10.5
 // @description  Complete TVDB 5-step workflow helper with TMDB/OMDb/Hoichoi integration and flexible data source modes
 // @author       you
 // @updateURL    https://raw.githubusercontent.com/geek-baba/tvdb-automation/main/src/tvdb-workflow-complete.user.js
@@ -695,7 +695,7 @@
                     <div id="tvdb-manual-episode-fields" style="display: none;">
                         <div style="margin-bottom: 15px;">
                             <label style="display: block; margin-bottom: 5px; color: #ccc;">Paste Episode Data (JSON or Text):</label>
-                            <textarea id="tvdb-manual-episode-data" placeholder='Paste episode data here. Examples: CSV format (from Gemini/AI): Episode Number,Title (Original),Runtime,Summary/Description S1 E1,Kiraaye Ka Kissa - Hindi,9m,Shreya is muddled about... S1 E2,Online Shaadi - Hindi,9m,When her parents... JSON format: [ {"episodeNumber": 1, "name": "Kiraaye Ka Kissa - Hindi", "overview": "Shreya is muddled...", "runtime": 9} ] Or simple text format: 1. Kiraaye Ka Kissa - Hindi | 9m | Shreya is muddled...' style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: #333; color: white; min-height: 150px; font-family: monospace; font-size: 11px; margin-bottom: 5px;"></textarea>
+                            <textarea id="tvdb-manual-episode-data" placeholder='Paste episode data here. Examples: CSV format (from Gemini/AI): Episode Number,Title (Original),Runtime,Air Date,Summary/Description S1 E1,The World of Insanity,24m,2025-11-07,"Journalist Anumita Sen lands..." S1 E2,New truth,21m,2025-11-07,"Anumita discovers a link..." JSON format: [ {"episodeNumber": 1, "name": "Episode Title", "overview": "Description...", "runtime": 24, "airDate": "2025-11-07"} ] Or simple text format: 1. Episode Title | 24m | 2025-11-07 | Description...' style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: #333; color: white; min-height: 150px; font-family: monospace; font-size: 11px; margin-bottom: 5px;"></textarea>
                             <div style="font-size: 10px; color: #999; margin-bottom: 10px;">
                                 💡 Tip: Take a screenshot of Hoichoi episodes, extract data with Gemini/AI, and paste here
                             </div>
@@ -1690,7 +1690,7 @@
                 log(`Not JSON format, trying CSV parsing...`);
                 
                 // Try CSV format (from Gemini/AI extraction)
-                // Format: "S1 E1,Title - Hindi,9m,Description"
+                // Format: "S1 E1,Title,24m,2025-11-07,Description" or "S1 E1,Title,24m,Description" (without Air Date)
                 const lines = manualData.split('\n').map(l => l.trim()).filter(l => l.length > 0);
                 
                 // Check if first line looks like CSV header
@@ -1698,6 +1698,7 @@
                     lines[0].includes('Episode Number') ||
                     lines[0].includes('Title') ||
                     lines[0].includes('Runtime') ||
+                    lines[0].includes('Air Date') ||
                     lines[0].includes(',')
                 );
 
@@ -1707,7 +1708,7 @@
                     // Skip header row - find it first
                     let headerIndex = 0;
                     for (let idx = 0; idx < lines.length; idx++) {
-                        if (lines[idx].includes('Episode Number') || lines[idx].includes('Title') || lines[idx].includes('Runtime')) {
+                        if (lines[idx].includes('Episode Number') || lines[idx].includes('Title') || lines[idx].includes('Runtime') || lines[idx].includes('Air Date')) {
                             headerIndex = idx;
                             log(`📊 Found CSV header at line ${idx}: "${lines[idx]}"`);
                             break;
@@ -1724,7 +1725,7 @@
 
                         log(`📊 Parsing CSV line ${i}: "${line.substring(0, 50)}..."`);
 
-                        // Parse CSV line: "S1 E1,Title - Hindi,9m,Description"
+                        // Parse CSV line: "S1 E1,Title,24m,2025-11-07,Description" or "S1 E1,Title,24m,Description"
                         // Handle quoted fields that may contain commas
                         const csvFields = [];
                         let currentField = '';
@@ -1766,12 +1767,37 @@
                                 }
                             }
 
+                            // Extract air date (format: YYYY-MM-DD)
+                            let airDate = '';
+                            if (csvFields.length >= 4 && csvFields[3]) {
+                                // Check if field 3 looks like a date (YYYY-MM-DD format)
+                                const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+                                if (datePattern.test(csvFields[3])) {
+                                    airDate = csvFields[3];
+                                    log(`📊 CSV Line ${i}: Extracted air date ${airDate}`);
+                                }
+                            }
+
                             // Extract description
+                            // If we have 5 fields, description is in field 4 (after Air Date)
+                            // If we have 4 fields and field 3 is not a date, description might be in field 3
+                            // If we have 3 fields, description might be in field 2 (if it's not runtime)
                             let overview = '';
-                            if (csvFields.length >= 4) {
-                                overview = csvFields[3] || '';
+                            if (csvFields.length >= 5) {
+                                // Format: Episode,Title,Runtime,Air Date,Description
+                                overview = csvFields[4] || '';
+                            } else if (csvFields.length >= 4) {
+                                // Could be: Episode,Title,Runtime,Description (no Air Date)
+                                // Or: Episode,Title,Runtime,Air Date (no Description)
+                                if (airDate) {
+                                    // We found Air Date, so no description in this format
+                                    overview = '';
+                                } else {
+                                    // No Air Date found, so field 3 is likely description
+                                    overview = csvFields[3] || '';
+                                }
                             } else if (csvFields.length >= 3 && !csvFields[2].match(/\d+m/i)) {
-                                // If field 3 doesn't look like runtime, it might be description
+                                // If field 2 doesn't look like runtime, it might be description
                                 overview = csvFields[2] || '';
                             }
 
@@ -1779,12 +1805,12 @@
                                 episodeNumber: episodeNumber,
                                 name: title || `Episode ${episodeNumber}`,
                                 overview: overview,
-                                airDate: '',
+                                airDate: airDate,
                                 runtime: runtime,
                                 isHoichoiOnly: true,
                                 descriptionSource: 'Manual'
                             });
-                            log(`✅ Parsed CSV Episode ${episodeNumber}: "${title}" (${runtime}m)`);
+                            log(`✅ Parsed CSV Episode ${episodeNumber}: "${title}" (${runtime}m)${airDate ? ` [${airDate}]` : ''}`);
                         }
                     }
                     if (episodes.length > 0) {
@@ -1795,15 +1821,17 @@
                 // If CSV parsing didn't work, try other text formats
                 if (episodes.length === 0) {
                     // Try parsing text format like:
-                    // 1. Title | 9m | Description
-                    // 2. Title | 9m | Description
+                    // 1. Title | 24m | 2025-11-07 | Description
+                    // 1. Title | 24m | Description
                     for (const line of lines) {
-                        // Try pattern: "1. Title - Hindi | 9m | Description"
-                        // Or: "S1 E1: Title - Hindi | 9m | Description"
-                        // Or: "Episode 1: Title - Hindi | 9m | Description"
+                        // Try pattern: "1. Title | 24m | 2025-11-07 | Description" (with Air Date)
+                        // Or: "1. Title | 24m | Description" (without Air Date)
+                        // Or: "S1 E1: Title | 24m | 2025-11-07 | Description"
                         const patterns = [
-                            /^(?:S\d+\s*E|Episode\s*|Ep\s*)?(\d+)[:.\s-]+\s*(.+?)\s*\|\s*(\d+)m?\s*\|\s*(.+)$/i,
-                            /^(\d+)[:.\s-]+\s*(.+?)\s*\|\s*(\d+)m?\s*\|\s*(.+)$/i,
+                            /^(?:S\d+\s*E|Episode\s*|Ep\s*)?(\d+)[:.\s-]+\s*(.+?)\s*\|\s*(\d+)m?\s*\|\s*(\d{4}-\d{2}-\d{2})\s*\|\s*(.+)$/i,  // With Air Date
+                            /^(?:S\d+\s*E|Episode\s*|Ep\s*)?(\d+)[:.\s-]+\s*(.+?)\s*\|\s*(\d+)m?\s*\|\s*(.+)$/i,  // Without Air Date
+                            /^(\d+)[:.\s-]+\s*(.+?)\s*\|\s*(\d+)m?\s*\|\s*(\d{4}-\d{2}-\d{2})\s*\|\s*(.+)$/i,  // With Air Date
+                            /^(\d+)[:.\s-]+\s*(.+?)\s*\|\s*(\d+)m?\s*\|\s*(.+)$/i,  // Without Air Date
                             /^(\d+)[:.\s-]+\s*(.+?)\s*\|\s*(.+)$/i,
                             /^(\d+)[:.\s-]+\s*(.+)$/i
                         ];
@@ -1814,14 +1842,28 @@
                                 const epNum = parseInt(match[1]);
                                 let title = match[2]?.trim() || '';
                                 let runtime = 0;
+                                let airDate = '';
                                 let overview = '';
 
+                                // Extract runtime, air date, and overview based on pattern match
+                                // Patterns with Air Date: match[3]=runtime, match[4]=airDate, match[5]=overview
+                                // Patterns without Air Date: match[3]=runtime, match[4]=overview
+                                
                                 if (match[3]) {
-                                    // Check if match[3] is runtime or part of title
+                                    // Check if match[3] is runtime (numeric)
                                     if (match[3].match(/^\d+$/)) {
                                         runtime = parseInt(match[3]);
-                                        overview = match[4]?.trim() || '';
+                                        
+                                        // Check if match[4] is Air Date (YYYY-MM-DD format)
+                                        if (match[4] && match[4].match(/^\d{4}-\d{2}-\d{2}$/)) {
+                                            airDate = match[4];
+                                            overview = match[5]?.trim() || '';
+                                        } else {
+                                            // No Air Date, match[4] is overview
+                                            overview = match[4]?.trim() || '';
+                                        }
                                     } else {
+                                        // match[3] is not runtime, it's probably overview
                                         overview = match[3]?.trim() || '';
                                     }
                                 }
@@ -1833,7 +1875,7 @@
                                     episodeNumber: epNum,
                                     name: title || `Episode ${epNum}`,
                                     overview: overview,
-                                    airDate: '',
+                                    airDate: airDate,
                                     runtime: runtime,
                                     isHoichoiOnly: true,
                                     descriptionSource: 'Manual'
