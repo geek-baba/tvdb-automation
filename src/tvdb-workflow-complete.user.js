@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TVDB Workflow Helper - Complete
 // @namespace    tvdb.workflow
-// @version      1.10.6
+// @version      1.10.7
 // @description  Complete TVDB 5-step workflow helper with TMDB/OMDb/Hoichoi integration and flexible data source modes
 // @author       you
 // @updateURL    https://raw.githubusercontent.com/geek-baba/tvdb-automation/main/src/tvdb-workflow-complete.user.js
@@ -800,7 +800,6 @@
                             <option value="tmdb">TMDB (Recommended)</option>
                             <option value="omdb">OMDb</option>
                             <option value="hoichoi">Hoichoi (URL)</option>
-                            <option value="manual">Manual Entry</option>
                         </select>
                     </div>
 
@@ -4951,7 +4950,7 @@
                 updateTranslationPreview(translationData);
                 updateStatus(`Found ${translationData.source} English translation: ${translationData.name}`);
             } else {
-                updateStatus('No translation data found. Please try a different source or manual entry.');
+                updateStatus('No translation data found. Please try a different source (TMDB, OMDb, or Hoichoi).');
             }
 
         } catch (error) {
