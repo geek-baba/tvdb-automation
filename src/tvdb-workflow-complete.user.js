@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TVDB Workflow Helper - Complete
 // @namespace    tvdb.workflow
-// @version      1.10.7
+// @version      1.10.8
 // @description  Complete TVDB 5-step workflow helper with TMDB/OMDb/Hoichoi integration and flexible data source modes
 // @author       you
 // @updateURL    https://raw.githubusercontent.com/geek-baba/tvdb-automation/main/src/tvdb-workflow-complete.user.js
@@ -638,6 +638,10 @@
                             <button id="tvdb-translate-title" class="tvdb-workflow-btn" style="background: #9C27B0; color: white; border: none; border-radius: 4px; padding: 8px 12px; cursor: pointer; font-size: 12px;">🌐 Translate Title</button>
                             <button id="tvdb-translate-overview" class="tvdb-workflow-btn" style="background: #9C27B0; color: white; border: none; border-radius: 4px; padding: 8px 12px; cursor: pointer; font-size: 12px;">🌐 Translate Overview</button>
                         </div>
+                        <div style="margin-top: 8px; display: flex; align-items: center; gap: 6px;">
+                            <input type="checkbox" id="tvdb-force-translation" style="cursor: pointer; width: 14px; height: 14px;">
+                            <label for="tvdb-force-translation" style="color: #ccc; font-size: 11px; cursor: pointer; user-select: none;">Force Translation (bypass language detection)</label>
+                        </div>
                         <div style="margin-top: 6px; padding: 6px; background: #2a2a2a; border-radius: 3px; font-size: 10px; color: #aaa;">
                             Translate English title/overview to original language (${context.originalIso1 || 'auto-detect'})
                         </div>
@@ -972,7 +976,13 @@
                 if (fetchDataStep2Btn) fetchDataStep2Btn.onclick = fetchDataStep2;
                 
                 const translateTitleBtn = document.getElementById('tvdb-translate-title');
-                if (translateTitleBtn) translateTitleBtn.onclick = translateTitle;
+                if (translateTitleBtn) {
+                    translateTitleBtn.onclick = () => {
+                        const forceCheckbox = document.getElementById('tvdb-force-translation');
+                        const force = forceCheckbox ? forceCheckbox.checked : false;
+                        translateTitle(force);
+                    };
+                }
                 
                 const translateOverviewBtn = document.getElementById('tvdb-translate-overview');
                 if (translateOverviewBtn) translateOverviewBtn.onclick = translateOverview;
@@ -1326,7 +1336,7 @@
     }
 
     // Manual translation functions for Step 2
-    async function translateTitle() {
+    async function translateTitle(force = false) {
         if (!window.tvdbFetchedData || !window.tvdbFetchedData.tmdb) {
             updateStatus('No data available. Please fetch data first.');
             return;
@@ -1356,11 +1366,12 @@
         const isHoichoiShow = window.tvdbFetchedData?.isHoichoiOnly || tmdbData.isHoichoiOnly;
         
         // Only check if title is already in target language for non-Hoichoi shows
-        if (!isHoichoiShow && originalLang !== 'en') {
+        // Skip this check if force=true (user wants to force translation)
+        if (!force && !isHoichoiShow && originalLang !== 'en') {
             const titleIsEnglish = isLikelyEnglish(currentTitle);
             if (!titleIsEnglish) {
                 // Title is already in original language, no need to translate
-                updateStatus(`Title appears to already be in ${originalLang}. No translation needed.`);
+                updateStatus(`Title appears to already be in ${originalLang}. No translation needed. Use "Force Translation" to override.`);
                 log(`Title "${currentTitle}" is already in ${originalLang}, skipping translation`);
                 return;
             }
@@ -1368,7 +1379,7 @@
         
         try {
             updateStatus(`Translating title to ${originalLang}...`);
-            log(`Manually translating title: "${currentTitle}" -> ${originalLang}${isHoichoiShow ? ' (Hoichoi: English title to Bengali)' : ''}`);
+            log(`Manually translating title: "${currentTitle}" -> ${originalLang}${isHoichoiShow ? ' (Hoichoi: English title to Bengali)' : ''}${force ? ' (FORCED - bypassing language detection)' : ''}`);
             
             const translated = await translateText(currentTitle, originalLang);
             
