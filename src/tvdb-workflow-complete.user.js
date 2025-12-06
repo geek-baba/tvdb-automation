@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TVDB Workflow Helper - Complete
 // @namespace    tvdb.workflow
-// @version      1.10.2
+// @version      1.10.3
 // @description  Complete TVDB 5-step workflow helper with TMDB/OMDb/Hoichoi integration and flexible data source modes
 // @author       you
 // @updateURL    https://raw.githubusercontent.com/geek-baba/tvdb-automation/main/src/tvdb-workflow-complete.user.js
@@ -1347,9 +1347,18 @@
             return;
         }
         
+        // Check if title appears to already be in the target language
+        const titleIsEnglish = isLikelyEnglish(currentTitle);
+        if (originalLang !== 'en' && !titleIsEnglish) {
+            // Title is already in original language (e.g., Bengali), no need to translate
+            updateStatus(`Title appears to already be in ${originalLang}. No translation needed.`);
+            log(`Title "${currentTitle}" is already in ${originalLang}, skipping translation`);
+            return;
+        }
+        
         try {
             updateStatus(`Translating title to ${originalLang}...`);
-            log(`Manually translating title: "${currentTitle}" to ${originalLang}`);
+            log(`Manually translating title: "${currentTitle}" (English) -> ${originalLang}`);
             
             const translated = await translateText(currentTitle, originalLang);
             
@@ -1365,11 +1374,13 @@
                 updateStatus(`✓ Title translated successfully!`);
                 log(`✓ Translated title: "${currentTitle}" -> "${translated}"`);
             } else {
-                updateStatus(`Translation didn't change the text. Using original.`);
+                updateStatus(`Translation didn't change the text. Title may already be in ${originalLang} or translation service returned same text.`);
+                log(`Translation returned same or empty text for "${currentTitle}"`);
             }
         } catch (error) {
             updateStatus(`Translation failed: ${error.message}`);
             log(`Translation error:`, error);
+            console.error('Translation error details:', error);
         }
     }
     
@@ -3143,26 +3154,52 @@
         }
 
         // Extract language from title, metadata, or page
+        // Default to Bengali for all Hoichoi shows unless explicitly detected otherwise
         const langPatterns = [
-            /\(Hindi\)/i,
-            /\(Bengali\)/i,
-            /\(English\)/i,
-            /\(Tamil\)/i,
-            /\(Telugu\)/i,
-            /Hindi\s+Web\s+Series/i,
-            /Bengali\s+Web\s+Series/i
+            /\(Bengali\)|Bengali\s+Web\s+Series|bengali/i,  // Check Bengali first
+            /\(Hindi\)|Hindi\s+Web\s+Series|hindi/i,
+            /\(English\)|English\s+Web\s+Series|english/i,
+            /\(Tamil\)|Tamil\s+Web\s+Series|tamil/i,
+            /\(Telugu\)|Telugu\s+Web\s+Series|telugu/i
         ];
         
+        let languageDetected = false;
         for (const pattern of langPatterns) {
             const match = html.match(pattern);
             if (match) {
                 const langText = match[0].toLowerCase();
-                if (langText.includes('hindi')) { language = 'hi'; break; }
-                else if (langText.includes('bengali')) { language = 'bn'; break; }
-                else if (langText.includes('english')) { language = 'en'; break; }
-                else if (langText.includes('tamil')) { language = 'ta'; break; }
-                else if (langText.includes('telugu')) { language = 'te'; break; }
+                if (langText.includes('bengali')) { 
+                    language = 'bn'; 
+                    languageDetected = true;
+                    break; 
+                }
+                else if (langText.includes('hindi')) { 
+                    language = 'hi'; 
+                    languageDetected = true;
+                    break; 
+                }
+                else if (langText.includes('english')) { 
+                    language = 'en'; 
+                    languageDetected = true;
+                    break; 
+                }
+                else if (langText.includes('tamil')) { 
+                    language = 'ta'; 
+                    languageDetected = true;
+                    break; 
+                }
+                else if (langText.includes('telugu')) { 
+                    language = 'te'; 
+                    languageDetected = true;
+                    break; 
+                }
             }
+        }
+        
+        // Always default to Bengali if no language detected (Hoichoi is primarily Bengali content)
+        if (!languageDetected) {
+            language = 'bn';
+            log('No language detected in page, defaulting to Bengali (bn)');
         }
 
         // Extract poster/image URL (prefer larger images)
