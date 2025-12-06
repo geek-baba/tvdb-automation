@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TVDB Workflow Helper - Complete
 // @namespace    tvdb.workflow
-// @version      1.10.3
+// @version      1.10.4
 // @description  Complete TVDB 5-step workflow helper with TMDB/OMDb/Hoichoi integration and flexible data source modes
 // @author       you
 // @updateURL    https://raw.githubusercontent.com/geek-baba/tvdb-automation/main/src/tvdb-workflow-complete.user.js
@@ -1347,18 +1347,24 @@
             return;
         }
         
-        // Check if title appears to already be in the target language
-        const titleIsEnglish = isLikelyEnglish(currentTitle);
-        if (originalLang !== 'en' && !titleIsEnglish) {
-            // Title is already in original language (e.g., Bengali), no need to translate
-            updateStatus(`Title appears to already be in ${originalLang}. No translation needed.`);
-            log(`Title "${currentTitle}" is already in ${originalLang}, skipping translation`);
-            return;
+        // For Hoichoi shows, website displays titles in English but content is in Bengali
+        // Always translate English titles to Bengali for Hoichoi shows
+        const isHoichoiShow = window.tvdbFetchedData?.isHoichoiOnly || tmdbData.isHoichoiOnly;
+        
+        // Only check if title is already in target language for non-Hoichoi shows
+        if (!isHoichoiShow && originalLang !== 'en') {
+            const titleIsEnglish = isLikelyEnglish(currentTitle);
+            if (!titleIsEnglish) {
+                // Title is already in original language, no need to translate
+                updateStatus(`Title appears to already be in ${originalLang}. No translation needed.`);
+                log(`Title "${currentTitle}" is already in ${originalLang}, skipping translation`);
+                return;
+            }
         }
         
         try {
             updateStatus(`Translating title to ${originalLang}...`);
-            log(`Manually translating title: "${currentTitle}" (English) -> ${originalLang}`);
+            log(`Manually translating title: "${currentTitle}" -> ${originalLang}${isHoichoiShow ? ' (Hoichoi: English title to Bengali)' : ''}`);
             
             const translated = await translateText(currentTitle, originalLang);
             
@@ -1409,9 +1415,13 @@
             return;
         }
         
+        // For Hoichoi shows, website displays overviews in English but content is in Bengali
+        // Always translate English overviews to Bengali for Hoichoi shows
+        const isHoichoiShow = window.tvdbFetchedData?.isHoichoiOnly || tmdbData.isHoichoiOnly;
+        
         try {
             updateStatus(`Translating overview to ${originalLang}...`);
-            log(`Manually translating overview (${currentOverview.length} chars) to ${originalLang}`);
+            log(`Manually translating overview (${currentOverview.length} chars) to ${originalLang}${isHoichoiShow ? ' (Hoichoi: English overview to Bengali)' : ''}`);
             
             const translated = await translateText(currentOverview, originalLang);
             
