@@ -1,19 +1,29 @@
 // ==UserScript==
 // @name         TVDB Workflow Helper - Complete
 // @namespace    tvdb.workflow
-// @version      1.5.0
-// @description  Complete TVDB 5-step workflow helper with TMDB/OMDb integration and flexible OMDb-only mode
+// @version      1.10.8
+// @description  Complete TVDB 5-step workflow helper with TMDB/OMDb/Hoichoi integration and flexible data source modes
 // @author       you
+// @updateURL    https://raw.githubusercontent.com/geek-baba/tvdb-automation/main/src/tvdb-workflow-complete.user.js
+// @downloadURL  https://raw.githubusercontent.com/geek-baba/tvdb-automation/main/src/tvdb-workflow-complete.user.js
 // @match        https://thetvdb.com/series/create*
+// @match        https://www.thetvdb.com/series/create*
 // @match        https://thetvdb.com/series/create-step2*
+// @match        https://www.thetvdb.com/series/create-step2*
 // @match        https://thetvdb.com/series/*/seasons/official/*/bulkadd*
+// @match        https://www.thetvdb.com/series/*/seasons/official/*/bulkadd*
 // @match        https://thetvdb.com/artwork/upload*
+// @match        https://www.thetvdb.com/artwork/upload*
 // @match        https://thetvdb.com/series/*/translate/eng*
+// @match        https://www.thetvdb.com/series/*/translate/eng*
 // @run-at       document-end
 // @grant        GM_setValue
 // @grant        GM_getValue
+// @grant        GM_xmlhttpRequest
 // @connect      api.themoviedb.org
 // @connect      www.omdbapi.com
+// @connect      www.hoichoi.tv
+// @connect      image.hoichoicdn.com
 // @connect      libretranslate.com
 // @connect      libretranslate.de
 // @connect      api.mymemory.translated.net
@@ -22,9 +32,9 @@
 (function() {
     'use strict';
 
-    console.log('🎬 TVDB Workflow Helper v1.5.0 - Production Ready');
+    console.log('🎬 TVDB Workflow Helper v1.6.0 - Production Ready');
     console.log('📋 Complete 5-step TVDB submission automation');
-    console.log('🔧 TMDB + OMDb integration with flexible OMDb-only mode (Steps 1, 2 & 3)');
+    console.log('🔧 TMDB + OMDb + Hoichoi integration with flexible data source modes');
 
     // Configuration and state
     const CONFIG = {
@@ -518,6 +528,7 @@
                         <select id="tvdb-data-source" style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: #333; color: white; margin-bottom: 10px;">
                             <option value="tmdb">TMDB (Recommended)</option>
                             <option value="omdb">OMDb Only (IMDb ID)</option>
+                            <option value="hoichoi">Hoichoi (URL)</option>
                         </select>
                     </div>
 
@@ -535,6 +546,16 @@
                                value="${context.imdbId}">
                         <div style="font-size: 10px; color: #999; margin-bottom: 10px;">
                             ⚠️ OMDb-only mode: Limited data available, no episode descriptions
+                        </div>
+                    </div>
+
+                    <div id="tvdb-hoichoi-fields" style="margin-bottom: 15px; display: none;">
+                        <label style="display: block; margin-bottom: 5px; color: #ccc;">Hoichoi Show URL:</label>
+                        <input type="text" id="tvdb-hoichoi-url" placeholder="e.g., https://www.hoichoi.tv/shows/show-slug or /webseries/show-slug"
+                               style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: #333; color: white; margin-bottom: 5px;"
+                               value="">
+                        <div style="font-size: 10px; color: #999; margin-bottom: 10px;">
+                            ⚠️ Hoichoi mode: Official site will be set to this URL
                         </div>
                     </div>
 
@@ -561,6 +582,7 @@
                         <select id="tvdb-data-source-step2" style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: #333; color: white; margin-bottom: 10px;">
                             <option value="tmdb">TMDB (Recommended)</option>
                             <option value="omdb">OMDb Only (IMDb ID)</option>
+                            <option value="hoichoi">Hoichoi (URL)</option>
                         </select>
                     </div>
 
@@ -578,6 +600,16 @@
                                value="${context.imdbId}">
                         <div style="font-size: 10px; color: #999; margin-bottom: 10px;">
                             ⚠️ OMDb-only mode: Limited data available
+                        </div>
+                    </div>
+
+                    <div id="tvdb-hoichoi-fields-step2" style="margin-bottom: 15px; display: none;">
+                        <label style="display: block; margin-bottom: 5px; color: #ccc;">Hoichoi Show URL:</label>
+                        <input type="text" id="tvdb-hoichoi-url-step2" placeholder="e.g., https://www.hoichoi.tv/shows/show-slug or /webseries/show-slug"
+                               style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: #333; color: white; margin-bottom: 5px;"
+                               value="">
+                        <div style="font-size: 10px; color: #999; margin-bottom: 10px;">
+                            ⚠️ Hoichoi mode: Official site will be set to this URL
                         </div>
                     </div>
 
@@ -605,6 +637,10 @@
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
                             <button id="tvdb-translate-title" class="tvdb-workflow-btn" style="background: #9C27B0; color: white; border: none; border-radius: 4px; padding: 8px 12px; cursor: pointer; font-size: 12px;">🌐 Translate Title</button>
                             <button id="tvdb-translate-overview" class="tvdb-workflow-btn" style="background: #9C27B0; color: white; border: none; border-radius: 4px; padding: 8px 12px; cursor: pointer; font-size: 12px;">🌐 Translate Overview</button>
+                        </div>
+                        <div style="margin-top: 8px; display: flex; align-items: center; gap: 6px;">
+                            <input type="checkbox" id="tvdb-force-translation" style="cursor: pointer; width: 14px; height: 14px;">
+                            <label for="tvdb-force-translation" style="color: #ccc; font-size: 11px; cursor: pointer; user-select: none;">Force Translation (bypass language detection)</label>
                         </div>
                         <div style="margin-top: 6px; padding: 6px; background: #2a2a2a; border-radius: 3px; font-size: 10px; color: #aaa;">
                             Translate English title/overview to original language (${context.originalIso1 || 'auto-detect'})
@@ -635,6 +671,7 @@
                         <select id="tvdb-episode-source" style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: #333; color: white; margin-bottom: 10px;">
                             <option value="tmdb">TMDB (Recommended)</option>
                             <option value="omdb">OMDb Only (IMDb ID)</option>
+                            <option value="manual">Manual Input (Paste Data)</option>
                         </select>
                     </div>
 
@@ -660,6 +697,16 @@
                                    value="${context.imdbId}">
                             <div style="font-size: 10px; color: #999; margin-bottom: 10px;">
                                 ⚠️ OMDb episode data: titles and air dates only, limited descriptions
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="tvdb-manual-episode-fields" style="display: none;">
+                        <div style="margin-bottom: 15px;">
+                            <label style="display: block; margin-bottom: 5px; color: #ccc;">Paste Episode Data (JSON or Text):</label>
+                            <textarea id="tvdb-manual-episode-data" placeholder='Paste episode data here. Examples: CSV format (from Gemini/AI): Episode Number,Title (Original),Runtime,Air Date,Summary/Description S1 E1,The World of Insanity,24m,2025-11-07,"Journalist Anumita Sen lands..." S1 E2,New truth,21m,2025-11-07,"Anumita discovers a link..." JSON format: [ {"episodeNumber": 1, "name": "Episode Title", "overview": "Description...", "runtime": 24, "airDate": "2025-11-07"} ] Or simple text format: 1. Episode Title | 24m | 2025-11-07 | Description...' style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: #333; color: white; min-height: 150px; font-family: monospace; font-size: 11px; margin-bottom: 5px;"></textarea>
+                            <div style="font-size: 10px; color: #999; margin-bottom: 10px;">
+                                💡 Tip: Take a screenshot of Hoichoi episodes, extract data with Gemini/AI, and paste here
                             </div>
                         </div>
                     </div>
@@ -756,8 +803,18 @@
                         <select id="tvdb-translation-source" style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: #333; color: #fff; font-size: 12px;">
                             <option value="tmdb">TMDB (Recommended)</option>
                             <option value="omdb">OMDb</option>
-                            <option value="manual">Manual Entry</option>
+                            <option value="hoichoi">Hoichoi (URL)</option>
                         </select>
+                    </div>
+
+                    <div id="tvdb-hoichoi-url-fields-step5" style="margin-bottom: 15px; display: none;">
+                        <label style="display: block; margin-bottom: 5px; color: #ccc;">Hoichoi Show URL:</label>
+                        <input type="text" id="tvdb-hoichoi-url-step5" placeholder="e.g., https://www.hoichoi.tv/shows/show-slug or /webseries/show-slug"
+                               style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: #333; color: white; margin-bottom: 5px;"
+                               value="${window.tvdbFetchedData?.officialSite || ''}">
+                        <div style="font-size: 10px; color: #999; margin-bottom: 10px;">
+                            ⚠️ Hoichoi shows are in regional languages. For English translations, use TMDB or OMDb.
+                        </div>
                     </div>
 
                     <div style="margin-bottom: 15px;">
@@ -896,12 +953,20 @@
                     dataSourceSelect.onchange = function() {
                         const tmdbFields = document.getElementById('tvdb-tmdb-fields');
                         const omdbFields = document.getElementById('tvdb-omdb-fields');
+                        const hoichoiFields = document.getElementById('tvdb-hoichoi-fields');
+                        
                         if (this.value === 'omdb') {
                             if (tmdbFields) tmdbFields.style.display = 'none';
                             if (omdbFields) omdbFields.style.display = 'block';
+                            if (hoichoiFields) hoichoiFields.style.display = 'none';
+                        } else if (this.value === 'hoichoi') {
+                            if (tmdbFields) tmdbFields.style.display = 'none';
+                            if (omdbFields) omdbFields.style.display = 'none';
+                            if (hoichoiFields) hoichoiFields.style.display = 'block';
                         } else {
                             if (tmdbFields) tmdbFields.style.display = 'block';
                             if (omdbFields) omdbFields.style.display = 'none';
+                            if (hoichoiFields) hoichoiFields.style.display = 'none';
                         }
                     };
                 }
@@ -911,7 +976,13 @@
                 if (fetchDataStep2Btn) fetchDataStep2Btn.onclick = fetchDataStep2;
                 
                 const translateTitleBtn = document.getElementById('tvdb-translate-title');
-                if (translateTitleBtn) translateTitleBtn.onclick = translateTitle;
+                if (translateTitleBtn) {
+                    translateTitleBtn.onclick = () => {
+                        const forceCheckbox = document.getElementById('tvdb-force-translation');
+                        const force = forceCheckbox ? forceCheckbox.checked : false;
+                        translateTitle(force);
+                    };
+                }
                 
                 const translateOverviewBtn = document.getElementById('tvdb-translate-overview');
                 if (translateOverviewBtn) translateOverviewBtn.onclick = translateOverview;
@@ -922,12 +993,19 @@
                     dataSourceSelectStep2.onchange = function() {
                         const tmdbFieldsStep2 = document.getElementById('tvdb-tmdb-fields-step2');
                         const omdbFieldsStep2 = document.getElementById('tvdb-omdb-fields-step2');
+                        const hoichoiFieldsStep2 = document.getElementById('tvdb-hoichoi-fields-step2');
                         if (this.value === 'omdb') {
                             if (tmdbFieldsStep2) tmdbFieldsStep2.style.display = 'none';
                             if (omdbFieldsStep2) omdbFieldsStep2.style.display = 'block';
+                            if (hoichoiFieldsStep2) hoichoiFieldsStep2.style.display = 'none';
+                        } else if (this.value === 'hoichoi') {
+                            if (tmdbFieldsStep2) tmdbFieldsStep2.style.display = 'none';
+                            if (omdbFieldsStep2) omdbFieldsStep2.style.display = 'none';
+                            if (hoichoiFieldsStep2) hoichoiFieldsStep2.style.display = 'block';
                         } else {
                             if (tmdbFieldsStep2) tmdbFieldsStep2.style.display = 'block';
                             if (omdbFieldsStep2) omdbFieldsStep2.style.display = 'none';
+                            if (hoichoiFieldsStep2) hoichoiFieldsStep2.style.display = 'none';
                         }
                     };
                 }
@@ -942,12 +1020,19 @@
                     episodeSourceSelect.onchange = function() {
                         const tmdbEpisodeFields = document.getElementById('tvdb-tmdb-episode-fields');
                         const omdbEpisodeFields = document.getElementById('tvdb-omdb-episode-fields');
+                        const manualEpisodeFields = document.getElementById('tvdb-manual-episode-fields');
                         if (this.value === 'omdb') {
                             if (tmdbEpisodeFields) tmdbEpisodeFields.style.display = 'none';
                             if (omdbEpisodeFields) omdbEpisodeFields.style.display = 'block';
+                            if (manualEpisodeFields) manualEpisodeFields.style.display = 'none';
+                        } else if (this.value === 'manual') {
+                            if (tmdbEpisodeFields) tmdbEpisodeFields.style.display = 'none';
+                            if (omdbEpisodeFields) omdbEpisodeFields.style.display = 'none';
+                            if (manualEpisodeFields) manualEpisodeFields.style.display = 'block';
                         } else {
                             if (tmdbEpisodeFields) tmdbEpisodeFields.style.display = 'block';
                             if (omdbEpisodeFields) omdbEpisodeFields.style.display = 'none';
+                            if (manualEpisodeFields) manualEpisodeFields.style.display = 'none';
                         }
                     };
                 }
@@ -959,6 +1044,24 @@
             case 'step5':
                 const fetchTranslationBtn = document.getElementById('tvdb-fetch-translation');
                 if (fetchTranslationBtn) fetchTranslationBtn.onclick = fetchTranslation;
+                
+                // Translation source selector for Step 5
+                const translationSourceSelect = document.getElementById('tvdb-translation-source');
+                if (translationSourceSelect) {
+                    translationSourceSelect.onchange = function() {
+                        const hoichoiFields = document.getElementById('tvdb-hoichoi-url-fields-step5');
+                        if (hoichoiFields) {
+                            hoichoiFields.style.display = this.value === 'hoichoi' ? 'block' : 'none';
+                        }
+                        // Update translation data display when source changes
+                        updateTranslationData();
+                    };
+                    // Show Hoichoi fields if Hoichoi is already selected
+                    if (translationSourceSelect.value === 'hoichoi') {
+                        const hoichoiFields = document.getElementById('tvdb-hoichoi-url-fields-step5');
+                        if (hoichoiFields) hoichoiFields.style.display = 'block';
+                    }
+                }
                 break;
         }
     }
@@ -1009,6 +1112,9 @@
         if (dataSource === 'omdb') {
             // OMDb-only mode
             await fetchDataStep2OmdbOnly();
+        } else if (dataSource === 'hoichoi') {
+            // Hoichoi mode
+            await fetchDataStep2Hoichoi();
         } else {
             // TMDB mode (original behavior)
             await fetchDataStep2Tmdb();
@@ -1166,8 +1272,71 @@
         }
     }
 
+    // Fetch data for step 2 using Hoichoi (HTML scraping)
+    async function fetchDataStep2Hoichoi() {
+        const hoichoiUrl = document.getElementById('tvdb-hoichoi-url-step2').value.trim();
+        
+        if (!hoichoiUrl) {
+            updateStatus('Please enter a Hoichoi show URL');
+            return;
+        }
+        
+        // Validate URL format using flexible validation
+        if (!isValidHoichoiUrl(hoichoiUrl)) {
+            updateStatus(getHoichoiUrlErrorMessage());
+            return;
+        }
+        
+        updateStatus('Fetching data from Hoichoi...');
+        log('Starting Hoichoi fetch for Step 2, URL:', hoichoiUrl);
+        
+        try {
+            // Fetch and scrape Hoichoi show
+            const tvdbData = await fetchHoichoiShow(hoichoiUrl);
+            
+            // Create simplified data for compatibility
+            const omdbData = null; // No OMDb data for Hoichoi
+            
+            // Update context
+            context.tmdbId = ''; // No TMDB ID in Hoichoi mode
+            context.imdbId = null; // No IMDb ID
+            context.originalIso1 = tvdbData.originalLanguage;
+            
+            // Store fetched data
+            window.tvdbFetchedData = {
+                tmdb: tvdbData,
+                omdb: omdbData,
+                imdbId: null,
+                tmdbId: '', // No TMDB ID
+                officialSite: hoichoiUrl, // Use Hoichoi URL as official site
+                isHoichoiOnly: true
+            };
+            
+            // Generate preview
+            const preview = generateStep2Preview(tvdbData, omdbData);
+            updatePreview(preview);
+            
+            // Update status
+            updateStatus(`Hoichoi data fetched successfully! Official site set to: ${hoichoiUrl}`);
+            log('Hoichoi fetch completed for Step 2', window.tvdbFetchedData);
+            
+        } catch (error) {
+            const errorMsg = error.message || error.toString() || 'Unknown error';
+            log('Error fetching Hoichoi data for Step 2:', error);
+            log('Error stack:', error.stack);
+            log('Error details:', JSON.stringify(error));
+            
+            // Provide more helpful error message
+            let userFriendlyMsg = `Error fetching Hoichoi data: ${errorMsg}`;
+            if (errorMsg.includes('Failed to fetch') || errorMsg.includes('CORS')) {
+                userFriendlyMsg += '\n\nPossible solutions:\n1. Check Tampermonkey permissions for hoichoi.tv\n2. Make sure @connect www.hoichoi.tv is in script header\n3. Try refreshing the page';
+            }
+            updateStatus(userFriendlyMsg);
+        }
+    }
+
     // Manual translation functions for Step 2
-    async function translateTitle() {
+    async function translateTitle(force = false) {
         if (!window.tvdbFetchedData || !window.tvdbFetchedData.tmdb) {
             updateStatus('No data available. Please fetch data first.');
             return;
@@ -1192,9 +1361,25 @@
             return;
         }
         
+        // For Hoichoi shows, website displays titles in English but content is in Bengali
+        // Always translate English titles to Bengali for Hoichoi shows
+        const isHoichoiShow = window.tvdbFetchedData?.isHoichoiOnly || tmdbData.isHoichoiOnly;
+        
+        // Only check if title is already in target language for non-Hoichoi shows
+        // Skip this check if force=true (user wants to force translation)
+        if (!force && !isHoichoiShow && originalLang !== 'en') {
+            const titleIsEnglish = isLikelyEnglish(currentTitle);
+            if (!titleIsEnglish) {
+                // Title is already in original language, no need to translate
+                updateStatus(`Title appears to already be in ${originalLang}. No translation needed. Use "Force Translation" to override.`);
+                log(`Title "${currentTitle}" is already in ${originalLang}, skipping translation`);
+                return;
+            }
+        }
+        
         try {
             updateStatus(`Translating title to ${originalLang}...`);
-            log(`Manually translating title: "${currentTitle}" to ${originalLang}`);
+            log(`Manually translating title: "${currentTitle}" -> ${originalLang}${isHoichoiShow ? ' (Hoichoi: English title to Bengali)' : ''}${force ? ' (FORCED - bypassing language detection)' : ''}`);
             
             const translated = await translateText(currentTitle, originalLang);
             
@@ -1210,11 +1395,13 @@
                 updateStatus(`✓ Title translated successfully!`);
                 log(`✓ Translated title: "${currentTitle}" -> "${translated}"`);
             } else {
-                updateStatus(`Translation didn't change the text. Using original.`);
+                updateStatus(`Translation didn't change the text. Title may already be in ${originalLang} or translation service returned same text.`);
+                log(`Translation returned same or empty text for "${currentTitle}"`);
             }
         } catch (error) {
             updateStatus(`Translation failed: ${error.message}`);
             log(`Translation error:`, error);
+            console.error('Translation error details:', error);
         }
     }
     
@@ -1243,9 +1430,13 @@
             return;
         }
         
+        // For Hoichoi shows, website displays overviews in English but content is in Bengali
+        // Always translate English overviews to Bengali for Hoichoi shows
+        const isHoichoiShow = window.tvdbFetchedData?.isHoichoiOnly || tmdbData.isHoichoiOnly;
+        
         try {
             updateStatus(`Translating overview to ${originalLang}...`);
-            log(`Manually translating overview (${currentOverview.length} chars) to ${originalLang}`);
+            log(`Manually translating overview (${currentOverview.length} chars) to ${originalLang}${isHoichoiShow ? ' (Hoichoi: English overview to Bengali)' : ''}`);
             
             const translated = await translateText(currentOverview, originalLang);
             
@@ -1302,6 +1493,9 @@
         if (episodeSource === 'omdb') {
             // OMDb-only mode
             await fetchEpisodesOmdbOnly();
+        } else if (episodeSource === 'manual') {
+            // Manual input mode
+            await fetchEpisodesManual();
         } else {
             // TMDB mode (original behavior)
             await fetchEpisodesTmdb();
@@ -1462,6 +1656,299 @@
         } catch (error) {
             updateStatus(`Error fetching OMDb episodes: ${error.message}`);
             log('Error fetching OMDb episodes:', error);
+        }
+    }
+
+    // Fetch episodes from manual input (paste data)
+    async function fetchEpisodesManual() {
+        const manualData = document.getElementById('tvdb-manual-episode-data')?.value.trim();
+        if (!manualData) {
+            updateStatus('Please paste episode data in the text area');
+            return;
+        }
+
+        updateStatus('Parsing manual episode data...');
+        log(`Parsing manual episode data (${manualData.length} characters)`);
+
+        try {
+            let episodes = [];
+
+            // Try parsing as JSON first
+            try {
+                const jsonData = JSON.parse(manualData);
+                if (Array.isArray(jsonData)) {
+                    episodes = jsonData.map((ep, idx) => ({
+                        episodeNumber: ep.episodeNumber || ep.episode_number || ep.number || ep.index || (idx + 1),
+                        name: ep.name || ep.title || ep.Title || ep.episodeName || `Episode ${ep.episodeNumber || ep.episode_number || ep.number || (idx + 1)}`,
+                        overview: ep.overview || ep.description || ep.plot || ep.synopsis || ep.summary || '',
+                        airDate: ep.airDate || ep.air_date || ep.released || ep.publishedAt || '',
+                        runtime: ep.runtime || ep.duration || (ep.runtimeMinutes ? parseInt(ep.runtimeMinutes) : 0) || 0,
+                        isHoichoiOnly: true,
+                        descriptionSource: 'Manual'
+                    }));
+                    log(`✅ Parsed ${episodes.length} episodes from JSON`);
+                } else if (jsonData.episodes || jsonData.data) {
+                    const episodeArray = jsonData.episodes || jsonData.data;
+                    episodes = episodeArray.map((ep, idx) => ({
+                        episodeNumber: ep.episodeNumber || ep.episode_number || ep.number || ep.index || (idx + 1),
+                        name: ep.name || ep.title || ep.Title || ep.episodeName || `Episode ${ep.episodeNumber || ep.episode_number || ep.number || (idx + 1)}`,
+                        overview: ep.overview || ep.description || ep.plot || ep.synopsis || ep.summary || '',
+                        airDate: ep.airDate || ep.air_date || ep.released || ep.publishedAt || '',
+                        runtime: ep.runtime || ep.duration || (ep.runtimeMinutes ? parseInt(ep.runtimeMinutes) : 0) || 0,
+                        isHoichoiOnly: true,
+                        descriptionSource: 'Manual'
+                    }));
+                    log(`✅ Parsed ${episodes.length} episodes from JSON object`);
+                }
+            } catch (e) {
+                // Not JSON, try CSV format
+                log(`Not JSON format, trying CSV parsing...`);
+                
+                // Try CSV format (from Gemini/AI extraction)
+                // Format: "S1 E1,Title,24m,2025-11-07,Description" or "S1 E1,Title,24m,Description" (without Air Date)
+                const lines = manualData.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+                
+                // Check if first line looks like CSV header
+                const isCSV = lines[0] && (
+                    lines[0].includes('Episode Number') ||
+                    lines[0].includes('Title') ||
+                    lines[0].includes('Runtime') ||
+                    lines[0].includes('Air Date') ||
+                    lines[0].includes(',')
+                );
+
+                if (isCSV && lines.length > 1) {
+                    log(`✅ Detected CSV format, parsing ${lines.length - 1} data rows (skipping header)`);
+                    
+                    // Skip header row - find it first
+                    let headerIndex = 0;
+                    for (let idx = 0; idx < lines.length; idx++) {
+                        if (lines[idx].includes('Episode Number') || lines[idx].includes('Title') || lines[idx].includes('Runtime') || lines[idx].includes('Air Date')) {
+                            headerIndex = idx;
+                            log(`📊 Found CSV header at line ${idx}: "${lines[idx]}"`);
+                            break;
+                        }
+                    }
+
+                    // Parse data rows starting after header
+                    for (let i = headerIndex + 1; i < lines.length; i++) {
+                        const line = lines[i];
+                        if (!line || line.trim().length === 0) {
+                            log(`⚠️ Skipping empty line ${i}`);
+                            continue;
+                        }
+
+                        log(`📊 Parsing CSV line ${i}: "${line.substring(0, 50)}..."`);
+
+                        // Parse CSV line: "S1 E1,Title,24m,2025-11-07,Description" or "S1 E1,Title,24m,Description"
+                        // Handle quoted fields that may contain commas
+                        const csvFields = [];
+                        let currentField = '';
+                        let inQuotes = false;
+                        for (let j = 0; j < line.length; j++) {
+                            const char = line[j];
+                            if (char === '"') {
+                                inQuotes = !inQuotes;
+                            } else if (char === ',' && !inQuotes) {
+                                csvFields.push(currentField.trim());
+                                currentField = '';
+                            } else {
+                                currentField += char;
+                            }
+                        }
+                        csvFields.push(currentField.trim()); // Add last field
+
+                        if (csvFields.length >= 2) {
+                            // Extract episode number from "S1 E1" format
+                            let episodeNumber = 1;
+                            const epNumMatch = csvFields[0].match(/S\d+\s*E(\d+)|S\d+E(\d+)|[Ee]pisode\s*(\d+)|Ep\s*(\d+)|(\d+)/i);
+                            if (epNumMatch) {
+                                episodeNumber = parseInt(epNumMatch[1] || epNumMatch[2] || epNumMatch[3] || epNumMatch[4] || epNumMatch[5]);
+                                log(`📊 CSV Line ${i}: Extracted episode number ${episodeNumber} from "${csvFields[0]}"`);
+                            } else {
+                                log(`⚠️ CSV Line ${i}: Could not extract episode number from "${csvFields[0]}"`);
+                            }
+
+                            // Extract title (remove language suffix)
+                            let title = csvFields[1] || '';
+                            title = title.replace(/\s*-\s*(Hindi|Bengali|English|Tamil|Telugu|Marathi|Gujarati|Punjabi|Kannada|Malayalam)$/i, '').trim();
+
+                            // Extract runtime (handle "9m" or "34m" format)
+                            let runtime = 0;
+                            if (csvFields.length >= 3 && csvFields[2]) {
+                                const runtimeMatch = csvFields[2].match(/(\d+)\s*m/i);
+                                if (runtimeMatch) {
+                                    runtime = parseInt(runtimeMatch[1]);
+                                }
+                            }
+
+                            // Extract air date (format: YYYY-MM-DD)
+                            let airDate = '';
+                            if (csvFields.length >= 4 && csvFields[3]) {
+                                // Check if field 3 looks like a date (YYYY-MM-DD format)
+                                const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+                                if (datePattern.test(csvFields[3])) {
+                                    airDate = csvFields[3];
+                                    log(`📊 CSV Line ${i}: Extracted air date ${airDate}`);
+                                }
+                            }
+
+                            // Extract description
+                            // If we have 5 fields, description is in field 4 (after Air Date)
+                            // If we have 4 fields and field 3 is not a date, description might be in field 3
+                            // If we have 3 fields, description might be in field 2 (if it's not runtime)
+                            let overview = '';
+                            if (csvFields.length >= 5) {
+                                // Format: Episode,Title,Runtime,Air Date,Description
+                                overview = csvFields[4] || '';
+                            } else if (csvFields.length >= 4) {
+                                // Could be: Episode,Title,Runtime,Description (no Air Date)
+                                // Or: Episode,Title,Runtime,Air Date (no Description)
+                                if (airDate) {
+                                    // We found Air Date, so no description in this format
+                                    overview = '';
+                                } else {
+                                    // No Air Date found, so field 3 is likely description
+                                    overview = csvFields[3] || '';
+                                }
+                            } else if (csvFields.length >= 3 && !csvFields[2].match(/\d+m/i)) {
+                                // If field 2 doesn't look like runtime, it might be description
+                                overview = csvFields[2] || '';
+                            }
+
+                            episodes.push({
+                                episodeNumber: episodeNumber,
+                                name: title || `Episode ${episodeNumber}`,
+                                overview: overview,
+                                airDate: airDate,
+                                runtime: runtime,
+                                isHoichoiOnly: true,
+                                descriptionSource: 'Manual'
+                            });
+                            log(`✅ Parsed CSV Episode ${episodeNumber}: "${title}" (${runtime}m)${airDate ? ` [${airDate}]` : ''}`);
+                        }
+                    }
+                    if (episodes.length > 0) {
+                        log(`✅ Successfully parsed ${episodes.length} episodes from CSV format`);
+                    }
+                }
+
+                // If CSV parsing didn't work, try other text formats
+                if (episodes.length === 0) {
+                    // Try parsing text format like:
+                    // 1. Title | 24m | 2025-11-07 | Description
+                    // 1. Title | 24m | Description
+                    for (const line of lines) {
+                        // Try pattern: "1. Title | 24m | 2025-11-07 | Description" (with Air Date)
+                        // Or: "1. Title | 24m | Description" (without Air Date)
+                        // Or: "S1 E1: Title | 24m | 2025-11-07 | Description"
+                        const patterns = [
+                            /^(?:S\d+\s*E|Episode\s*|Ep\s*)?(\d+)[:.\s-]+\s*(.+?)\s*\|\s*(\d+)m?\s*\|\s*(\d{4}-\d{2}-\d{2})\s*\|\s*(.+)$/i,  // With Air Date
+                            /^(?:S\d+\s*E|Episode\s*|Ep\s*)?(\d+)[:.\s-]+\s*(.+?)\s*\|\s*(\d+)m?\s*\|\s*(.+)$/i,  // Without Air Date
+                            /^(\d+)[:.\s-]+\s*(.+?)\s*\|\s*(\d+)m?\s*\|\s*(\d{4}-\d{2}-\d{2})\s*\|\s*(.+)$/i,  // With Air Date
+                            /^(\d+)[:.\s-]+\s*(.+?)\s*\|\s*(\d+)m?\s*\|\s*(.+)$/i,  // Without Air Date
+                            /^(\d+)[:.\s-]+\s*(.+?)\s*\|\s*(.+)$/i,
+                            /^(\d+)[:.\s-]+\s*(.+)$/i
+                        ];
+
+                        for (const pattern of patterns) {
+                            const match = line.match(pattern);
+                            if (match) {
+                                const epNum = parseInt(match[1]);
+                                let title = match[2]?.trim() || '';
+                                let runtime = 0;
+                                let airDate = '';
+                                let overview = '';
+
+                                // Extract runtime, air date, and overview based on pattern match
+                                // Patterns with Air Date: match[3]=runtime, match[4]=airDate, match[5]=overview
+                                // Patterns without Air Date: match[3]=runtime, match[4]=overview
+                                
+                                if (match[3]) {
+                                    // Check if match[3] is runtime (numeric)
+                                    if (match[3].match(/^\d+$/)) {
+                                        runtime = parseInt(match[3]);
+                                        
+                                        // Check if match[4] is Air Date (YYYY-MM-DD format)
+                                        if (match[4] && match[4].match(/^\d{4}-\d{2}-\d{2}$/)) {
+                                            airDate = match[4];
+                                            overview = match[5]?.trim() || '';
+                                        } else {
+                                            // No Air Date, match[4] is overview
+                                            overview = match[4]?.trim() || '';
+                                        }
+                                    } else {
+                                        // match[3] is not runtime, it's probably overview
+                                        overview = match[3]?.trim() || '';
+                                    }
+                                }
+
+                                // Remove language suffix from title
+                                title = title.replace(/\s*-\s*(Hindi|Bengali|English|Tamil|Telugu|Marathi|Gujarati|Punjabi|Kannada|Malayalam)$/i, '').trim();
+
+                                episodes.push({
+                                    episodeNumber: epNum,
+                                    name: title || `Episode ${epNum}`,
+                                    overview: overview,
+                                    airDate: airDate,
+                                    runtime: runtime,
+                                    isHoichoiOnly: true,
+                                    descriptionSource: 'Manual'
+                                });
+                                break;
+                            }
+                        }
+                    }
+                    if (episodes.length === 0) {
+                        // Try simple numbered list
+                        lines.forEach((line, idx) => {
+                            const epMatch = line.match(/^(\d+)[:.\s-]+\s*(.+)$/);
+                            if (epMatch) {
+                                const epNum = parseInt(epMatch[1]);
+                                let title = epMatch[2].trim();
+                                title = title.replace(/\s*-\s*(Hindi|Bengali|English|Tamil|Telugu)$/i, '').trim();
+                                episodes.push({
+                                    episodeNumber: epNum,
+                                    name: title || `Episode ${epNum}`,
+                                    overview: '',
+                                    airDate: '',
+                                    runtime: 0,
+                                    isHoichoiOnly: true,
+                                    descriptionSource: 'Manual'
+                                });
+                            }
+                        });
+                    }
+                    log(`✅ Parsed ${episodes.length} episodes from text format`);
+                }
+            }
+
+            if (episodes.length === 0) {
+                throw new Error('Could not parse episode data. Please use JSON format or text format like: "1. Title | 9m | Description"');
+            }
+
+            // Sort episodes by episode number to ensure correct order
+            episodes.sort((a, b) => (a.episodeNumber || 0) - (b.episodeNumber || 0));
+            log(`✅ Sorted ${episodes.length} episodes by episode number`);
+
+            // Store episode data globally
+            window.tvdbEpisodeData = {
+                season: parseInt(document.getElementById('tvdb-season-num')?.value || '1'),
+                episodes: episodes,
+                tmdbId: '',
+                imdbId: null,
+                isHoichoiOnly: true
+            };
+
+            // Generate preview
+            const preview = generateStep3Preview(episodes);
+            updatePreview(preview);
+            updateStatus(`Parsed ${episodes.length} episodes from manual input! Click Fill to populate the form.`);
+            log(`Manual episode parsing completed successfully. Found ${episodes.length} episodes`);
+
+        } catch (error) {
+            updateStatus(`Error parsing manual episode data: ${error.message}`);
+            log('Error parsing manual episode data:', error);
         }
     }
 
@@ -1706,6 +2193,9 @@
         if (dataSource === 'omdb') {
             // OMDb-only mode
             await fetchDataOmdbOnly();
+        } else if (dataSource === 'hoichoi') {
+            // Hoichoi mode
+            await fetchDataHoichoi();
         } else {
             // TMDB mode (original behavior)
             await fetchDataTmdb();
@@ -1855,6 +2345,120 @@
         }
     }
 
+    // ============================================================
+    // Hoichoi URL Validation Functions
+    // ============================================================
+    
+    // Validate Hoichoi URL against all known patterns
+    function isValidHoichoiUrl(url) {
+        if (!url || typeof url !== 'string') return false;
+        
+        // Normalize URL
+        const normalized = url.trim();
+        
+        // Check if it's a Hoichoi domain
+        if (!normalized.includes('hoichoi.tv')) return false;
+        
+        // Check for valid show URL patterns
+        const validPatterns = [
+            /hoichoi\.tv\/shows\/[^\/\s?#]+/i,
+            /hoichoi\.tv\/webseries\/[^\/\s?#]+/i,
+            /hoichoi\.tv\/series\/[^\/\s?#]+/i,
+            /hoichoi\.tv\/content\/[^\/\s?#]+/i
+        ];
+        
+        return validPatterns.some(pattern => pattern.test(normalized));
+    }
+    
+    // Extract show slug from various URL formats
+    function extractHoichoiSlug(url) {
+        if (!url) return null;
+        
+        const normalized = url.trim();
+        
+        // Try to extract slug from various patterns
+        const patterns = [
+            /hoichoi\.tv\/shows\/([^\/\s?#]+)/i,
+            /hoichoi\.tv\/webseries\/([^\/\s?#]+)/i,
+            /hoichoi\.tv\/series\/([^\/\s?#]+)/i,
+            /hoichoi\.tv\/content\/([^\/\s?#]+)/i
+        ];
+        
+        for (const pattern of patterns) {
+            const match = normalized.match(pattern);
+            if (match && match[1]) {
+                return match[1];
+            }
+        }
+        
+        return null;
+    }
+    
+    // Get user-friendly error message for invalid URLs
+    function getHoichoiUrlErrorMessage() {
+        return 'Invalid Hoichoi URL. Supported formats:\n' +
+               '• https://www.hoichoi.tv/shows/show-slug\n' +
+               '• https://www.hoichoi.tv/webseries/show-slug\n' +
+               '• https://www.hoichoi.tv/series/show-slug\n' +
+               '• https://www.hoichoi.tv/content/show-slug';
+    }
+
+    // Fetch data using Hoichoi (HTML scraping)
+    async function fetchDataHoichoi() {
+        const hoichoiUrl = document.getElementById('tvdb-hoichoi-url').value.trim();
+
+        if (!hoichoiUrl) {
+            updateStatus('Please enter a Hoichoi show URL');
+            return;
+        }
+
+        // Validate URL format using flexible validation
+        if (!isValidHoichoiUrl(hoichoiUrl)) {
+            updateStatus(getHoichoiUrlErrorMessage());
+            return;
+        }
+
+        updateStatus('Fetching data from Hoichoi...');
+        log('Starting Hoichoi fetch for URL:', hoichoiUrl);
+
+        try {
+            // Fetch and scrape Hoichoi show
+            const tvdbData = await fetchHoichoiShow(hoichoiUrl);
+
+            // Create simplified data for compatibility
+            const omdbData = null; // No OMDb data for Hoichoi
+
+            // Update context
+            context.tmdbId = ''; // No TMDB ID in Hoichoi mode
+            context.imdbId = null; // No IMDb ID
+            context.originalIso1 = tvdbData.originalLanguage;
+            context.step = 'step1';
+
+            // Store fetched data
+            window.tvdbFetchedData = {
+                tmdb: tvdbData,
+                omdb: omdbData,
+                imdbId: null,
+                tmdbId: '', // No TMDB ID
+                officialSite: hoichoiUrl, // Use Hoichoi URL as official site
+                isHoichoiOnly: true
+            };
+
+            // Update preview
+            updatePreview(generateStep1Preview(tvdbData, omdbData, null));
+
+            // Update status
+            updateStatus(`Hoichoi data fetched successfully! Official site set to: ${hoichoiUrl}`);
+
+            saveConfig();
+            log('Hoichoi fetch completed', window.tvdbFetchedData);
+
+        } catch (error) {
+            updateStatus(`Error fetching Hoichoi data: ${error.message}`);
+            log('Error fetching Hoichoi data:', error);
+        }
+    }
+
     // Generate step 2 preview
     function generateStep2Preview(tmdbData, omdbData) {
         // Check if overview appears to be translated or in original language
@@ -1903,17 +2507,30 @@
             </div>`;
         }
 
+        // Check if this is Hoichoi-only mode
+        if (tmdbData && tmdbData.isHoichoiOnly) {
+            html += `<div style="background: #3a2a4a; padding: 8px; border-radius: 4px; margin-bottom: 10px; border-left: 3px solid #9C27B0;">
+                <div style="color: #9C27B0; font-weight: bold; margin-bottom: 5px;">📺 Hoichoi Mode</div>
+                <div style="font-size: 11px; color: #ccc;">Data scraped from Hoichoi.tv. Official site will be set to Hoichoi URL.</div>
+            </div>`;
+        }
+
         if (tmdbData) {
             const originalLangName = LANGUAGE_NAMES[tmdbData.originalLanguage] || tmdbData.originalLanguage;
-            const dataSource = tmdbData.isOmdbOnly ? 'OMDb' : 'TMDB';
+            let dataSource = 'TMDB';
+            if (tmdbData.isOmdbOnly) dataSource = 'OMDb';
+            else if (tmdbData.isHoichoiOnly) dataSource = 'Hoichoi';
+            
             html += `<div><strong>${dataSource} Title:</strong> ${tmdbData.name} (${tmdbData.year})</div>`;
-            if (!tmdbData.isOmdbOnly) {
+            if (!tmdbData.isOmdbOnly && !tmdbData.isHoichoiOnly) {
                 html += `<div><strong>TMDB Original:</strong> ${tmdbData.originalName} (${tmdbData.year})</div>`;
             }
             html += `<div><strong>Original Language:</strong> ${originalLangName} (${tmdbData.originalLanguage})</div>`;
-            html += `<div><strong>IMDb ID:</strong> ${imdbId || 'Not found'}</div>`;
+            if (!tmdbData.isHoichoiOnly) {
+                html += `<div><strong>IMDb ID:</strong> ${imdbId || 'Not found'}</div>`;
+            }
             if (tmdbData.homepage) {
-                html += `<div><strong>Official Site:</strong> ${tmdbData.homepage}</div>`;
+                html += `<div><strong>Official Site:</strong> <a href="${tmdbData.homepage}" target="_blank" style="color: #4CAF50;">${tmdbData.homepage}</a></div>`;
             }
             if (tmdbData.overview) {
                 html += `<div><strong>Overview:</strong> ${tmdbData.overview.substring(0, 150)}...</div>`;
@@ -1924,12 +2541,12 @@
             }
         }
 
-        if (omdbData && !tmdbData.isOmdbOnly) {
+        if (omdbData && !tmdbData.isOmdbOnly && !tmdbData.isHoichoiOnly) {
             html += `<div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #444;">`;
             html += `<div><strong>IMDb Title:</strong> ${omdbData.title} (${omdbData.year})</div>`;
             html += `<div><strong>IMDb Language:</strong> ${omdbData.language}</div>`;
             html += `</div>`;
-        } else if (!omdbData && !tmdbData.isOmdbOnly) {
+        } else if (!omdbData && !tmdbData.isOmdbOnly && !tmdbData.isHoichoiOnly) {
             html += `<div><strong>IMDb Data:</strong> Not available from OMDb</div>`;
         }
 
@@ -2408,6 +3025,326 @@
         };
     }
 
+    // ============================================================
+    // Hoichoi Scraper Functions
+    // ============================================================
+
+    // Fetch and scrape Hoichoi show page
+    async function fetchHoichoiShow(url) {
+        try {
+            log(`🔍 Fetching Hoichoi show from: ${url}`);
+            updateStatus('Fetching data from Hoichoi...');
+
+            // Validate URL using flexible validation
+            if (!isValidHoichoiUrl(url)) {
+                throw new Error(getHoichoiUrlErrorMessage());
+            }
+
+            // Ensure URL has protocol
+            if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                url = 'https://' + url;
+            }
+
+            // Fetch page HTML using GM_xmlhttpRequest (works better with CORS in Tampermonkey)
+            let html;
+            
+            // Check for GM_xmlhttpRequest in multiple ways (Tampermonkey exposes it differently)
+            let gmRequest = null;
+            try {
+                if (typeof GM_xmlhttpRequest !== 'undefined' && GM_xmlhttpRequest) {
+                    gmRequest = GM_xmlhttpRequest;
+                } else if (typeof window !== 'undefined' && window.GM_xmlhttpRequest) {
+                    gmRequest = window.GM_xmlhttpRequest;
+                }
+            } catch (e) {
+                // unsafeWindow or other access might fail, ignore
+                log('Could not access GM_xmlhttpRequest:', e);
+            }
+            
+            log(`GM_xmlhttpRequest available: ${!!gmRequest}`);
+            
+            if (gmRequest) {
+                // Use GM_xmlhttpRequest if available (Tampermonkey)
+                log('Using GM_xmlhttpRequest for cross-origin request');
+                html = await new Promise((resolve, reject) => {
+                    try {
+                        gmRequest({
+                            method: 'GET',
+                            url: url,
+                            headers: {
+                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                            },
+                            onload: function(response) {
+                                log(`GM_xmlhttpRequest response status: ${response.status}`);
+                                if (response.status >= 200 && response.status < 300) {
+                                    log('✅ Page HTML fetched successfully via GM_xmlhttpRequest');
+                                    resolve(response.responseText);
+                                } else {
+                                    const errorMsg = `HTTP ${response.status}: ${response.statusText || 'Unknown error'}`;
+                                    log(`❌ GM_xmlhttpRequest failed: ${errorMsg}`);
+                                    reject(new Error(errorMsg));
+                                }
+                            },
+                            onerror: function(error) {
+                                log('❌ GM_xmlhttpRequest onerror called:', JSON.stringify(error));
+                                const errorMsg = error.error || error.message || 'Network error: Failed to fetch';
+                                reject(new Error(errorMsg));
+                            },
+                            ontimeout: function() {
+                                log('❌ GM_xmlhttpRequest timeout');
+                                reject(new Error('Request timeout after 30 seconds'));
+                            },
+                            timeout: 30000 // 30 second timeout
+                        });
+                    } catch (err) {
+                        log('❌ Exception in GM_xmlhttpRequest setup:', err);
+                        reject(new Error(`GM_xmlhttpRequest setup failed: ${err.message || err}`));
+                    }
+                });
+            } else {
+                // Fallback to fetch (for other userscript managers or if GM_xmlhttpRequest not available)
+                log('⚠️ GM_xmlhttpRequest not available, using fetch (may fail due to CORS)');
+                try {
+                    const response = await fetch(url, {
+                        method: 'GET',
+                        mode: 'cors',
+                        headers: {
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                        }
+                    });
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText || 'Unknown error'}`);
+                    }
+                    html = await response.text();
+                    log('✅ Page HTML fetched via fetch() fallback');
+                } catch (fetchError) {
+                    log('❌ Fetch fallback also failed:', fetchError);
+                    throw new Error(`Failed to fetch page: ${fetchError.message || 'CORS or network error'}`);
+                }
+            }
+            log('✅ Page HTML fetched');
+
+            // Parse the page
+            const scrapedData = parseHoichoiPage(html, url);
+            log('✅ Page parsed successfully');
+
+            // Convert to TVDB format
+            const tvdbData = convertHoichoiToTvdbFormat(scrapedData, url);
+            log('✅ Data converted to TVDB format');
+
+            return tvdbData;
+
+        } catch (error) {
+            log(`❌ Error fetching Hoichoi show: ${error.message}`);
+            throw error;
+        }
+    }
+
+    // Parse Hoichoi page HTML to extract show data
+    function parseHoichoiPage(html, url) {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+
+        // Extract title from page title or h1
+        let title = '';
+        const pageTitle = doc.querySelector('title');
+        if (pageTitle) {
+            // Page title format: "Watch Chill Dil | Hindi Web Series | hoichoi"
+            const titleMatch = pageTitle.textContent.match(/Watch\s+(.+?)\s*\||(.+?)\s*\|/);
+            if (titleMatch) {
+                title = (titleMatch[1] || titleMatch[2]).trim();
+            }
+        }
+        
+        // Fallback: try h1 or other title elements
+        if (!title) {
+            const titleElement = doc.querySelector('h1') || doc.querySelector('[class*="title"]');
+            if (titleElement) {
+                title = titleElement.textContent.trim();
+                // Remove language indicator like "(Hindi)" from title
+                title = title.replace(/\s*\([^)]+\)\s*$/, '').trim();
+            }
+        }
+
+        // Extract description/overview from meta tags
+        let description = '';
+        const metaDesc = doc.querySelector('meta[name="description"], meta[property="og:description"]');
+        if (metaDesc) {
+            description = metaDesc.getAttribute('content') || metaDesc.getAttribute('property') || '';
+        }
+        
+        // Try to find description in page content (look for longer text blocks)
+        if (!description || description.length < 50) {
+            const descElements = doc.querySelectorAll('p, div, [class*="description"], [class*="synopsis"], [class*="overview"]');
+            for (const el of descElements) {
+                const text = el.textContent.trim();
+                // Look for description-like text (50-1000 chars, not too short)
+                if (text.length > 50 && text.length < 1000 && 
+                    !text.includes('Subscribe') && 
+                    !text.includes('Watch') &&
+                    !text.includes('Season')) {
+                    description = text;
+                    break;
+                }
+            }
+        }
+
+        // Extract year and genres from metadata pattern: "U • 1 Season • 2024 • Romantic | Comedy"
+        let year = '';
+        let genres = [];
+        let language = 'bn'; // Default to Bengali
+        
+        // Look for metadata pattern in HTML
+        const metadataPattern = /([A-Z])\s*•\s*(\d+\s+Season)?\s*•\s*(\d{4})\s*•\s*([^•]+)/i;
+        const metadataMatch = html.match(metadataPattern);
+        
+        if (metadataMatch) {
+            year = metadataMatch[3] || '';
+            const genresText = metadataMatch[4] || '';
+            // Split genres by | and clean up
+            genres = genresText.split('|').map(g => g.trim()).filter(Boolean);
+        } else {
+            // Fallback: extract year from anywhere in HTML
+            const yearPattern = /\b(20\d{2}|19\d{2})\b/;
+            const yearMatches = html.match(yearPattern);
+            if (yearMatches) {
+                // Prefer recent years (2000+)
+                year = yearMatches.find(y => parseInt(y) >= 2000) || yearMatches[0];
+            }
+            
+            // Fallback: extract genres from common patterns
+            const genrePattern = /(Romantic|Comedy|Drama|Thriller|Action|Horror|Sci-Fi|Fantasy|Crime|Mystery|Adventure|Family|Animation|Documentary|Romance)[^|]*/gi;
+            const genreMatches = html.match(genrePattern);
+            if (genreMatches) {
+                genres = [...new Set(genreMatches.map(g => g.trim()))];
+            }
+        }
+
+        // Extract language from title, metadata, or page
+        // Default to Bengali for all Hoichoi shows unless explicitly detected otherwise
+        const langPatterns = [
+            /\(Bengali\)|Bengali\s+Web\s+Series|bengali/i,  // Check Bengali first
+            /\(Hindi\)|Hindi\s+Web\s+Series|hindi/i,
+            /\(English\)|English\s+Web\s+Series|english/i,
+            /\(Tamil\)|Tamil\s+Web\s+Series|tamil/i,
+            /\(Telugu\)|Telugu\s+Web\s+Series|telugu/i
+        ];
+        
+        let languageDetected = false;
+        for (const pattern of langPatterns) {
+            const match = html.match(pattern);
+            if (match) {
+                const langText = match[0].toLowerCase();
+                if (langText.includes('bengali')) { 
+                    language = 'bn'; 
+                    languageDetected = true;
+                    break; 
+                }
+                else if (langText.includes('hindi')) { 
+                    language = 'hi'; 
+                    languageDetected = true;
+                    break; 
+                }
+                else if (langText.includes('english')) { 
+                    language = 'en'; 
+                    languageDetected = true;
+                    break; 
+                }
+                else if (langText.includes('tamil')) { 
+                    language = 'ta'; 
+                    languageDetected = true;
+                    break; 
+                }
+                else if (langText.includes('telugu')) { 
+                    language = 'te'; 
+                    languageDetected = true;
+                    break; 
+                }
+            }
+        }
+        
+        // Always default to Bengali if no language detected (Hoichoi is primarily Bengali content)
+        if (!languageDetected) {
+            language = 'bn';
+            log('No language detected in page, defaulting to Bengali (bn)');
+        }
+
+        // Extract poster/image URL (prefer larger images)
+        let posterUrl = '';
+        // Look for og:image meta tag first
+        const ogImage = doc.querySelector('meta[property="og:image"]');
+        if (ogImage) {
+            posterUrl = ogImage.getAttribute('content') || '';
+        }
+        
+        // Fallback: find image URLs in HTML
+        if (!posterUrl) {
+            const imagePatterns = [
+                /image\.hoichoicdn\.com[^"'\s]+1280x720[^"'\s]+/i,  // Prefer 1280x720
+                /image\.hoichoicdn\.com[^"'\s]+/i  // Any hoichoi image
+            ];
+            
+            for (const pattern of imagePatterns) {
+                const imageMatch = html.match(pattern);
+                if (imageMatch) {
+                    posterUrl = 'https://' + imageMatch[0];
+                    break;
+                }
+            }
+        }
+
+        log(`📊 Parsed Hoichoi data: Title="${title}", Year="${year}", Language="${language}", Genres=[${genres.join(', ')}]`);
+
+        return {
+            title: title,
+            description: description,
+            year: year,
+            genres: genres,
+            language: language,
+            posterUrl: posterUrl,
+            url: url
+        };
+    }
+
+    // Convert Hoichoi scraped data to TMDB-compatible format
+    function convertHoichoiToTvdbFormat(scrapedData, url) {
+        // Map Hoichoi language to ISO code
+        const langMap = {
+            'hi': 'hi', // Hindi
+            'bn': 'bn', // Bengali
+            'en': 'en', // English
+            'ta': 'ta', // Tamil
+            'te': 'te'  // Telugu
+        };
+
+        const originalLanguage = langMap[scrapedData.language] || 'bn';
+
+        // Parse genres - convert to array format
+        let genres = [];
+        if (Array.isArray(scrapedData.genres)) {
+            genres = scrapedData.genres;
+        } else if (typeof scrapedData.genres === 'string') {
+            genres = scrapedData.genres.split('|').map(g => g.trim()).filter(Boolean);
+        }
+
+        return {
+            name: scrapedData.title || '',
+            originalName: scrapedData.title || '',
+            overview: scrapedData.description || '',
+            year: scrapedData.year || '',
+            originalLanguage: originalLanguage,
+            genres: genres,
+            status: 'Ended', // Default, can be updated if we find status info
+            originCountry: ['IN'], // India (Hoichoi is Indian platform)
+            imdbId: null,
+            homepage: url,
+            runtime: null,
+            rating: null,
+            isHoichoiOnly: true,
+            posterUrl: scrapedData.posterUrl || ''
+        };
+    }
+
     // Apply step (fill form)
     function applyStep(step) {
         log(`Applying step: ${step}`);
@@ -2850,8 +3787,39 @@
         const addBtn = Array.from(document.querySelectorAll('button')).find(b => 
             /add another/i.test(b.textContent || '')
         );
-        const have = document.querySelectorAll('textarea').length;
+        
+        // Use gatherRows() to count actual episode rows (not just textareas)
+        let rows = gatherRows();
+        let have = rows.length;
+        
+        // Workaround: Count visible Episode # inputs as a more reliable check
+        // If gatherRows() finds 2 but we only see 1 visible Episode # input, use 1
+        const episodeInputs = Array.from(document.querySelectorAll('input')).filter(input => {
+            // Find the parent container
+            let container = input.closest('div, tr, form, fieldset');
+            if (!container) container = input.parentElement;
+            
+            // Check if this container has an "Episode #" label
+            const labels = Array.from(container.querySelectorAll('label') || []);
+            return labels.some(l => /episode\s*#/i.test(l.textContent || ''));
+        });
+        
+        // Filter to only visible inputs
+        const visibleEpisodeInputs = episodeInputs.filter(input => {
+            const rect = input.getBoundingClientRect();
+            const style = window.getComputedStyle(input);
+            return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden';
+        });
+        
+        // If we have a mismatch, trust the visible count
+        if (have !== visibleEpisodeInputs.length && visibleEpisodeInputs.length > 0) {
+            log(`ensureRows: Mismatch detected - gatherRows() found ${have} rows but ${visibleEpisodeInputs.length} visible Episode # inputs. Using visible count.`);
+            have = visibleEpisodeInputs.length;
+        }
+        
         const need = Math.min(25, n);
+        
+        log(`ensureRows: have=${have}, need=${need}, will create ${Math.max(0, need - have)} rows`);
         
         for (let i = have; i < need && addBtn; i++) {
             addBtn.click();
@@ -2859,23 +3827,52 @@
         }
     }
 
-    // EXACT copy from working script
+    // EXACT copy from working script (with UI panel exclusion fix)
     function gatherRows() {
-        const tas = Array.from(document.querySelectorAll('textarea'));
+        // Filter out UI panel textareas before processing
+        const allTextareas = Array.from(document.querySelectorAll('textarea'));
+        const tas = allTextareas.filter(ta => {
+            // Exclude textareas inside the UI panel
+            const panel = ta.closest('#tvdb-helper-panel');
+            return !panel; // Only process textareas NOT in the UI panel
+        });
+        
+        log(`gatherRows: Found ${tas.length} textareas (excluding UI panel)`);
+        
         const rows = [];
+        const seenRows = new Set(); // Track seen rows to avoid duplicates
         
         for (const ta of tas) {
             let p = ta;
             for (let i = 0; i < 6 && p; i++) {
+                // Look for Episode # input field - more unique identifier than "First Aired"
+                const episodeInput = Array.from(p.querySelectorAll('input')).find(input => {
+                    const labels = Array.from(p.querySelectorAll('label'));
+                    return labels.some(l => /episode\s*#/i.test(l.textContent || ''));
+                });
+                
+                // Also check for "First Aired" label as fallback
                 const labels = Array.from(p.querySelectorAll('label'));
-                if (labels.some(l => /first aired/i.test(l.textContent || ''))) {
-                    rows.push(p);
+                const hasFirstAired = labels.some(l => /first aired/i.test(l.textContent || ''));
+                const hasEpisodeNum = episodeInput !== undefined;
+                
+                // Require BOTH Episode # AND First Aired to be present (more strict)
+                if (hasFirstAired && hasEpisodeNum) {
+                    // Only add if we haven't seen this row element before
+                    if (!seenRows.has(p)) {
+                        rows.push(p);
+                        seenRows.add(p);
+                        log(`gatherRows: Added row ${rows.length} (found via textarea with Episode # and First Aired)`);
+                    } else {
+                        log(`gatherRows: Skipped duplicate row (already seen)`);
+                    }
                     break;
                 }
                 p = p.parentElement;
             }
         }
         
+        log(`gatherRows: Returning ${rows.length} unique episode rows`);
         return rows;
     }
 
@@ -3949,6 +4946,10 @@
                 } else {
                     throw new Error(`OMDb API error: ${response.status}`);
                 }
+            } else if (translationSource === 'hoichoi') {
+                // Fetch data from Hoichoi
+                await fetchTranslationHoichoi();
+                return; // fetchTranslationHoichoi handles its own status updates
             }
 
             if (translationData) {
@@ -3960,12 +4961,63 @@
                 updateTranslationPreview(translationData);
                 updateStatus(`Found ${translationData.source} English translation: ${translationData.name}`);
             } else {
-                updateStatus('No translation data found. Please try a different source or manual entry.');
+                updateStatus('No translation data found. Please try a different source (TMDB, OMDb, or Hoichoi).');
             }
 
         } catch (error) {
             log('Error fetching translation:', error);
             updateStatus(`Error fetching translation: ${error.message}`);
+        }
+    }
+
+    // Fetch translation data from Hoichoi
+    async function fetchTranslationHoichoi() {
+        const hoichoiUrl = document.getElementById('tvdb-hoichoi-url-step5')?.value.trim() || 
+                           window.tvdbFetchedData?.officialSite || '';
+        
+        if (!hoichoiUrl) {
+            updateStatus('Please enter a Hoichoi show URL');
+            return;
+        }
+        
+        if (!isValidHoichoiUrl(hoichoiUrl)) {
+            updateStatus(getHoichoiUrlErrorMessage());
+            return;
+        }
+        
+        updateStatus('Fetching translation data from Hoichoi...');
+        log('Starting Hoichoi translation fetch for URL:', hoichoiUrl);
+        
+        try {
+            // Fetch and scrape Hoichoi show
+            const tvdbData = await fetchHoichoiShow(hoichoiUrl);
+            
+            // Store fetched data
+            window.tvdbFetchedData = window.tvdbFetchedData || {};
+            window.tvdbFetchedData.tmdb = tvdbData;
+            window.tvdbFetchedData.officialSite = hoichoiUrl;
+            window.tvdbFetchedData.isHoichoiOnly = true;
+            
+            // Create translation data object
+            const translationData = {
+                name: tvdbData.name || tvdbData.originalName || '',
+                overview: tvdbData.overview || '',
+                source: 'Hoichoi'
+            };
+            
+            window.tvdbFetchedData.translationData = translationData;
+            
+            // Update translation preview
+            updateTranslationPreview(translationData);
+            updateTranslationData();
+            
+            updateStatus(`Hoichoi translation data fetched successfully!`);
+            log('Hoichoi translation fetch completed', window.tvdbFetchedData);
+            
+        } catch (error) {
+            const errorMsg = error.message || error.toString() || 'Unknown error';
+            log('Error fetching Hoichoi translation data:', error);
+            updateStatus(`Error fetching Hoichoi data: ${errorMsg}`);
         }
     }
 
