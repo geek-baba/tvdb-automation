@@ -1,16 +1,21 @@
 // ==UserScript==
 // @name         TVDB Workflow Helper - Complete
 // @namespace    tvdb.workflow
-// @version      1.10.5
+// @version      1.10.6
 // @description  Complete TVDB 5-step workflow helper with TMDB/OMDb/Hoichoi integration and flexible data source modes
 // @author       you
 // @updateURL    https://raw.githubusercontent.com/geek-baba/tvdb-automation/main/src/tvdb-workflow-complete.user.js
 // @downloadURL  https://raw.githubusercontent.com/geek-baba/tvdb-automation/main/src/tvdb-workflow-complete.user.js
 // @match        https://thetvdb.com/series/create*
+// @match        https://www.thetvdb.com/series/create*
 // @match        https://thetvdb.com/series/create-step2*
+// @match        https://www.thetvdb.com/series/create-step2*
 // @match        https://thetvdb.com/series/*/seasons/official/*/bulkadd*
+// @match        https://www.thetvdb.com/series/*/seasons/official/*/bulkadd*
 // @match        https://thetvdb.com/artwork/upload*
+// @match        https://www.thetvdb.com/artwork/upload*
 // @match        https://thetvdb.com/series/*/translate/eng*
+// @match        https://www.thetvdb.com/series/*/translate/eng*
 // @run-at       document-end
 // @grant        GM_setValue
 // @grant        GM_getValue
