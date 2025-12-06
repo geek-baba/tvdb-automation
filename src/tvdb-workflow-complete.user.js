@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         TVDB Workflow Helper - Complete
 // @namespace    tvdb.workflow
-// @version      1.9.5
+// @version      1.10.0
 // @description  Complete TVDB 5-step workflow helper with TMDB/OMDb/Hoichoi integration and flexible data source modes
 // @author       you
 // @updateURL    https://raw.githubusercontent.com/geek-baba/tvdb-automation/main/src/tvdb-workflow-complete.user.js
@@ -545,7 +545,7 @@
 
                     <div id="tvdb-hoichoi-fields" style="margin-bottom: 15px; display: none;">
                         <label style="display: block; margin-bottom: 5px; color: #ccc;">Hoichoi Show URL:</label>
-                        <input type="text" id="tvdb-hoichoi-url" placeholder="e.g., https://www.hoichoi.tv/shows/chill-dil-hoichoi-mini"
+                        <input type="text" id="tvdb-hoichoi-url" placeholder="e.g., https://www.hoichoi.tv/shows/show-slug or /webseries/show-slug"
                                style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: #333; color: white; margin-bottom: 5px;"
                                value="">
                         <div style="font-size: 10px; color: #999; margin-bottom: 10px;">
@@ -576,6 +576,7 @@
                         <select id="tvdb-data-source-step2" style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: #333; color: white; margin-bottom: 10px;">
                             <option value="tmdb">TMDB (Recommended)</option>
                             <option value="omdb">OMDb Only (IMDb ID)</option>
+                            <option value="hoichoi">Hoichoi (URL)</option>
                         </select>
                     </div>
 
@@ -593,6 +594,16 @@
                                value="${context.imdbId}">
                         <div style="font-size: 10px; color: #999; margin-bottom: 10px;">
                             ⚠️ OMDb-only mode: Limited data available
+                        </div>
+                    </div>
+
+                    <div id="tvdb-hoichoi-fields-step2" style="margin-bottom: 15px; display: none;">
+                        <label style="display: block; margin-bottom: 5px; color: #ccc;">Hoichoi Show URL:</label>
+                        <input type="text" id="tvdb-hoichoi-url-step2" placeholder="e.g., https://www.hoichoi.tv/shows/show-slug or /webseries/show-slug"
+                               style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: #333; color: white; margin-bottom: 5px;"
+                               value="">
+                        <div style="font-size: 10px; color: #999; margin-bottom: 10px;">
+                            ⚠️ Hoichoi mode: Official site will be set to this URL
                         </div>
                     </div>
 
@@ -782,8 +793,19 @@
                         <select id="tvdb-translation-source" style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: #333; color: #fff; font-size: 12px;">
                             <option value="tmdb">TMDB (Recommended)</option>
                             <option value="omdb">OMDb</option>
+                            <option value="hoichoi">Hoichoi (URL)</option>
                             <option value="manual">Manual Entry</option>
                         </select>
+                    </div>
+
+                    <div id="tvdb-hoichoi-url-fields-step5" style="margin-bottom: 15px; display: none;">
+                        <label style="display: block; margin-bottom: 5px; color: #ccc;">Hoichoi Show URL:</label>
+                        <input type="text" id="tvdb-hoichoi-url-step5" placeholder="e.g., https://www.hoichoi.tv/shows/show-slug or /webseries/show-slug"
+                               style="width: 100%; padding: 8px; border: 1px solid #555; border-radius: 4px; background: #333; color: white; margin-bottom: 5px;"
+                               value="${window.tvdbFetchedData?.officialSite || ''}">
+                        <div style="font-size: 10px; color: #999; margin-bottom: 10px;">
+                            ⚠️ Hoichoi shows are in regional languages. For English translations, use TMDB or OMDb.
+                        </div>
                     </div>
 
                     <div style="margin-bottom: 15px;">
@@ -956,12 +978,19 @@
                     dataSourceSelectStep2.onchange = function() {
                         const tmdbFieldsStep2 = document.getElementById('tvdb-tmdb-fields-step2');
                         const omdbFieldsStep2 = document.getElementById('tvdb-omdb-fields-step2');
+                        const hoichoiFieldsStep2 = document.getElementById('tvdb-hoichoi-fields-step2');
                         if (this.value === 'omdb') {
                             if (tmdbFieldsStep2) tmdbFieldsStep2.style.display = 'none';
                             if (omdbFieldsStep2) omdbFieldsStep2.style.display = 'block';
+                            if (hoichoiFieldsStep2) hoichoiFieldsStep2.style.display = 'none';
+                        } else if (this.value === 'hoichoi') {
+                            if (tmdbFieldsStep2) tmdbFieldsStep2.style.display = 'none';
+                            if (omdbFieldsStep2) omdbFieldsStep2.style.display = 'none';
+                            if (hoichoiFieldsStep2) hoichoiFieldsStep2.style.display = 'block';
                         } else {
                             if (tmdbFieldsStep2) tmdbFieldsStep2.style.display = 'block';
                             if (omdbFieldsStep2) omdbFieldsStep2.style.display = 'none';
+                            if (hoichoiFieldsStep2) hoichoiFieldsStep2.style.display = 'none';
                         }
                     };
                 }
@@ -1000,6 +1029,24 @@
             case 'step5':
                 const fetchTranslationBtn = document.getElementById('tvdb-fetch-translation');
                 if (fetchTranslationBtn) fetchTranslationBtn.onclick = fetchTranslation;
+                
+                // Translation source selector for Step 5
+                const translationSourceSelect = document.getElementById('tvdb-translation-source');
+                if (translationSourceSelect) {
+                    translationSourceSelect.onchange = function() {
+                        const hoichoiFields = document.getElementById('tvdb-hoichoi-url-fields-step5');
+                        if (hoichoiFields) {
+                            hoichoiFields.style.display = this.value === 'hoichoi' ? 'block' : 'none';
+                        }
+                        // Update translation data display when source changes
+                        updateTranslationData();
+                    };
+                    // Show Hoichoi fields if Hoichoi is already selected
+                    if (translationSourceSelect.value === 'hoichoi') {
+                        const hoichoiFields = document.getElementById('tvdb-hoichoi-url-fields-step5');
+                        if (hoichoiFields) hoichoiFields.style.display = 'block';
+                    }
+                }
                 break;
         }
     }
@@ -1050,6 +1097,9 @@
         if (dataSource === 'omdb') {
             // OMDb-only mode
             await fetchDataStep2OmdbOnly();
+        } else if (dataSource === 'hoichoi') {
+            // Hoichoi mode
+            await fetchDataStep2Hoichoi();
         } else {
             // TMDB mode (original behavior)
             await fetchDataStep2Tmdb();
@@ -1204,6 +1254,69 @@
         } catch (error) {
             updateStatus(`Error fetching OMDb data: ${error.message}`);
             log('Error fetching OMDb data:', error);
+        }
+    }
+
+    // Fetch data for step 2 using Hoichoi (HTML scraping)
+    async function fetchDataStep2Hoichoi() {
+        const hoichoiUrl = document.getElementById('tvdb-hoichoi-url-step2').value.trim();
+        
+        if (!hoichoiUrl) {
+            updateStatus('Please enter a Hoichoi show URL');
+            return;
+        }
+        
+        // Validate URL format using flexible validation
+        if (!isValidHoichoiUrl(hoichoiUrl)) {
+            updateStatus(getHoichoiUrlErrorMessage());
+            return;
+        }
+        
+        updateStatus('Fetching data from Hoichoi...');
+        log('Starting Hoichoi fetch for Step 2, URL:', hoichoiUrl);
+        
+        try {
+            // Fetch and scrape Hoichoi show
+            const tvdbData = await fetchHoichoiShow(hoichoiUrl);
+            
+            // Create simplified data for compatibility
+            const omdbData = null; // No OMDb data for Hoichoi
+            
+            // Update context
+            context.tmdbId = ''; // No TMDB ID in Hoichoi mode
+            context.imdbId = null; // No IMDb ID
+            context.originalIso1 = tvdbData.originalLanguage;
+            
+            // Store fetched data
+            window.tvdbFetchedData = {
+                tmdb: tvdbData,
+                omdb: omdbData,
+                imdbId: null,
+                tmdbId: '', // No TMDB ID
+                officialSite: hoichoiUrl, // Use Hoichoi URL as official site
+                isHoichoiOnly: true
+            };
+            
+            // Generate preview
+            const preview = generateStep2Preview(tvdbData, omdbData);
+            updatePreview(preview);
+            
+            // Update status
+            updateStatus(`Hoichoi data fetched successfully! Official site set to: ${hoichoiUrl}`);
+            log('Hoichoi fetch completed for Step 2', window.tvdbFetchedData);
+            
+        } catch (error) {
+            const errorMsg = error.message || error.toString() || 'Unknown error';
+            log('Error fetching Hoichoi data for Step 2:', error);
+            log('Error stack:', error.stack);
+            log('Error details:', JSON.stringify(error));
+            
+            // Provide more helpful error message
+            let userFriendlyMsg = `Error fetching Hoichoi data: ${errorMsg}`;
+            if (errorMsg.includes('Failed to fetch') || errorMsg.includes('CORS')) {
+                userFriendlyMsg += '\n\nPossible solutions:\n1. Check Tampermonkey permissions for hoichoi.tv\n2. Make sure @connect www.hoichoi.tv is in script header\n3. Try refreshing the page';
+            }
+            updateStatus(userFriendlyMsg);
         }
     }
 
@@ -2153,6 +2266,64 @@
         }
     }
 
+    // ============================================================
+    // Hoichoi URL Validation Functions
+    // ============================================================
+    
+    // Validate Hoichoi URL against all known patterns
+    function isValidHoichoiUrl(url) {
+        if (!url || typeof url !== 'string') return false;
+        
+        // Normalize URL
+        const normalized = url.trim();
+        
+        // Check if it's a Hoichoi domain
+        if (!normalized.includes('hoichoi.tv')) return false;
+        
+        // Check for valid show URL patterns
+        const validPatterns = [
+            /hoichoi\.tv\/shows\/[^\/\s?#]+/i,
+            /hoichoi\.tv\/webseries\/[^\/\s?#]+/i,
+            /hoichoi\.tv\/series\/[^\/\s?#]+/i,
+            /hoichoi\.tv\/content\/[^\/\s?#]+/i
+        ];
+        
+        return validPatterns.some(pattern => pattern.test(normalized));
+    }
+    
+    // Extract show slug from various URL formats
+    function extractHoichoiSlug(url) {
+        if (!url) return null;
+        
+        const normalized = url.trim();
+        
+        // Try to extract slug from various patterns
+        const patterns = [
+            /hoichoi\.tv\/shows\/([^\/\s?#]+)/i,
+            /hoichoi\.tv\/webseries\/([^\/\s?#]+)/i,
+            /hoichoi\.tv\/series\/([^\/\s?#]+)/i,
+            /hoichoi\.tv\/content\/([^\/\s?#]+)/i
+        ];
+        
+        for (const pattern of patterns) {
+            const match = normalized.match(pattern);
+            if (match && match[1]) {
+                return match[1];
+            }
+        }
+        
+        return null;
+    }
+    
+    // Get user-friendly error message for invalid URLs
+    function getHoichoiUrlErrorMessage() {
+        return 'Invalid Hoichoi URL. Supported formats:\n' +
+               '• https://www.hoichoi.tv/shows/show-slug\n' +
+               '• https://www.hoichoi.tv/webseries/show-slug\n' +
+               '• https://www.hoichoi.tv/series/show-slug\n' +
+               '• https://www.hoichoi.tv/content/show-slug';
+    }
+
     // Fetch data using Hoichoi (HTML scraping)
     async function fetchDataHoichoi() {
         const hoichoiUrl = document.getElementById('tvdb-hoichoi-url').value.trim();
@@ -2162,9 +2333,9 @@
             return;
         }
 
-        // Validate URL format
-        if (!hoichoiUrl.includes('hoichoi.tv/shows/')) {
-            updateStatus('Invalid Hoichoi URL. Expected format: https://www.hoichoi.tv/shows/show-slug');
+        // Validate URL format using flexible validation
+        if (!isValidHoichoiUrl(hoichoiUrl)) {
+            updateStatus(getHoichoiUrlErrorMessage());
             return;
         }
 
@@ -2785,9 +2956,9 @@
             log(`🔍 Fetching Hoichoi show from: ${url}`);
             updateStatus('Fetching data from Hoichoi...');
 
-            // Validate URL
-            if (!url || !url.includes('hoichoi.tv/shows/')) {
-                throw new Error('Invalid Hoichoi URL. Expected format: https://www.hoichoi.tv/shows/show-slug');
+            // Validate URL using flexible validation
+            if (!isValidHoichoiUrl(url)) {
+                throw new Error(getHoichoiUrlErrorMessage());
             }
 
             // Fetch page HTML
@@ -4595,6 +4766,10 @@
                 } else {
                     throw new Error(`OMDb API error: ${response.status}`);
                 }
+            } else if (translationSource === 'hoichoi') {
+                // Fetch data from Hoichoi
+                await fetchTranslationHoichoi();
+                return; // fetchTranslationHoichoi handles its own status updates
             }
 
             if (translationData) {
@@ -4612,6 +4787,57 @@
         } catch (error) {
             log('Error fetching translation:', error);
             updateStatus(`Error fetching translation: ${error.message}`);
+        }
+    }
+
+    // Fetch translation data from Hoichoi
+    async function fetchTranslationHoichoi() {
+        const hoichoiUrl = document.getElementById('tvdb-hoichoi-url-step5')?.value.trim() || 
+                           window.tvdbFetchedData?.officialSite || '';
+        
+        if (!hoichoiUrl) {
+            updateStatus('Please enter a Hoichoi show URL');
+            return;
+        }
+        
+        if (!isValidHoichoiUrl(hoichoiUrl)) {
+            updateStatus(getHoichoiUrlErrorMessage());
+            return;
+        }
+        
+        updateStatus('Fetching translation data from Hoichoi...');
+        log('Starting Hoichoi translation fetch for URL:', hoichoiUrl);
+        
+        try {
+            // Fetch and scrape Hoichoi show
+            const tvdbData = await fetchHoichoiShow(hoichoiUrl);
+            
+            // Store fetched data
+            window.tvdbFetchedData = window.tvdbFetchedData || {};
+            window.tvdbFetchedData.tmdb = tvdbData;
+            window.tvdbFetchedData.officialSite = hoichoiUrl;
+            window.tvdbFetchedData.isHoichoiOnly = true;
+            
+            // Create translation data object
+            const translationData = {
+                name: tvdbData.name || tvdbData.originalName || '',
+                overview: tvdbData.overview || '',
+                source: 'Hoichoi'
+            };
+            
+            window.tvdbFetchedData.translationData = translationData;
+            
+            // Update translation preview
+            updateTranslationPreview(translationData);
+            updateTranslationData();
+            
+            updateStatus(`Hoichoi translation data fetched successfully!`);
+            log('Hoichoi translation fetch completed', window.tvdbFetchedData);
+            
+        } catch (error) {
+            const errorMsg = error.message || error.toString() || 'Unknown error';
+            log('Error fetching Hoichoi translation data:', error);
+            updateStatus(`Error fetching Hoichoi data: ${errorMsg}`);
         }
     }
 
